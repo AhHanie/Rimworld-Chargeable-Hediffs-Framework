@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<LanguageData>
+    <CHF_Alert_LowCharge>Low implant charge</CHF_Alert_LowCharge>
+    <CHF_Alert_LowChargeDesc>The following pawns have low implant charge</CHF_Alert_LowChargeDesc>
+</LanguageData>

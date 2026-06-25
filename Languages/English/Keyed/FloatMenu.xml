@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<LanguageData>
+    <!-- Action label shown when right-clicking a charge station. {0} = station label. -->
+    <CHF_RechargeAt>Recharge implants at {0}</CHF_RechargeAt>
+
+    <!-- Disabled option prefix for all failure reasons. -->
+    <CHF_CannotRecharge>Cannot recharge implants</CHF_CannotRecharge>
+
+    <!-- Failure reasons appended after CHF_CannotRecharge + ": " -->
+    <CHF_NoRechargeableHediffs>no rechargeable implants</CHF_NoRechargeableHediffs>
+    <CHF_StationNotCompatible>station doesn't support any of your implants</CHF_StationNotCompatible>
+    <CHF_StationNoPower>no power</CHF_StationNoPower>
+    <CHF_AlreadyFullyCharged>already fully charged</CHF_AlreadyFullyCharged>
+</LanguageData>

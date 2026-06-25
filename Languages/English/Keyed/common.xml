@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<LanguageData>
+    <CHF_LoadingLabel>Loading Chargeable Hediffs Framework</CHF_LoadingLabel>
+    <CHF_Charge>Charge</CHF_Charge>
+    <CHF_ChargeDepleted>Depleted</CHF_ChargeDepleted>
+    <CHF_DepletedEffects>Active depleted penalties:</CHF_DepletedEffects>
+    <CHF_PartEfficiency>Part efficiency</CHF_PartEfficiency>
+    <CHF_DecayRate>Decay rate</CHF_DecayRate>
+    <CHF_PerDay>day</CHF_PerDay>
+    <CHF_DebugSetChargeZero>DEV: {0} charge 0</CHF_DebugSetChargeZero>
+    <CHF_DebugSetChargeZeroDesc>Set {0}'s charge to 0. Current charge: {1} / {2}.</CHF_DebugSetChargeZeroDesc>
+    <CHF_DebugSetChargeMax>DEV: {0} charge max</CHF_DebugSetChargeMax>
+    <CHF_DebugSetChargeMaxDesc>Set {0}'s charge to maximum. Current charge: {1} / {2}.</CHF_DebugSetChargeMaxDesc>
+    <CHF_DebugDrainChargeTen>DEV: {0} drain 10%</CHF_DebugDrainChargeTen>
+    <CHF_DebugDrainChargeTenDesc>Drain 10% of {0}'s maximum charge. Current charge: {1} / {2}.</CHF_DebugDrainChargeTenDesc>
+    <CHF_StatsReport_DepletedCharge>Depleted charge</CHF_StatsReport_DepletedCharge>
+</LanguageData>

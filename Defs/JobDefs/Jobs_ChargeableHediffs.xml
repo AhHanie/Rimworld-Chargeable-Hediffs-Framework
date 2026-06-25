@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+    <JobDef>
+        <defName>CHF_RechargeHediffs</defName>
+        <driverClass>Chargeable_Hediffs_Framework.JobDriver_RechargeHediffs</driverClass>
+        <reportString>recharging at TargetA.</reportString>
+    </JobDef>
+
+</Defs>
