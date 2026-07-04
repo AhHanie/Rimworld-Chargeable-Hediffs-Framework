@@ -13,6 +13,7 @@
 - [Quick Start](#quick-start)
 - [Hediff Comp XML Reference](#hediff-comp-xml-reference)
   - [HediffCompProperties_Rechargeable fields](#hediffcompproperties_rechargeable-fields)
+  - [HediffCompProperties_ChargeBattery fields](#hediffcompproperties_chargebattery-fields)
   - [ChargeConsequenceProperties fields](#chargeconsequenceproperties-fields)
   - [Understanding units](#understanding-units)
 - [Charge Station XML Reference](#charge-station-xml-reference)
@@ -29,8 +30,11 @@
   - [Charge station - hediff whitelist](#charge-station--hediff-whitelist)
   - [Wireless charger - standalone building](#wireless-charger--standalone-building)
   - [Wireless charging - patching an existing powered building](#wireless-charging--patching-an-existing-powered-building)
+  - [Rechargeable battery implant](#rechargeable-battery-implant)
+  - [Battery with target whitelist/blacklist](#battery-with-target-whitelistblacklist)
 - [Public API](#public-api)
   - [HediffComp_Rechargeable](#hediffcomp_rechargeable)
+  - [HediffComp_ChargeBattery](#hediffcomp_chargebattery)
   - [HediffChargeUtility](#hediffchargeutility)
   - [CompWirelessCharge](#compwirelesscharge)
 - [Compatibility Notes](#compatibility-notes)
@@ -44,6 +48,7 @@ Chargeable Hediffs Framework adds a reusable `HediffComp` that gives any hediff 
 **What the framework provides:**
 
 - `HediffComp_Rechargeable` - tracks current/max charge, decays over time, stores active depleted consequences in a pawn cache comp; stats use vanilla `ThingComp` stat hooks, part efficiency uses one targeted capacity patch.
+- `HediffComp_ChargeBattery` - turns a rechargeable hediff into a pawn-carried battery that drains itself to charge other rechargeable hediffs on the same pawn, with configurable rate, efficiency, and target filtering.
 - `ChargeStationExtension` - marks any powered `ThingDef` as a charge station.
 - Automatic work assignment - colonists/slaves/player mechs seek charge stations when any eligible hediff falls below 20 %.
 - Right-click manual recharge - select a pawn, right-click a powered station, choose _Recharge_.
@@ -109,6 +114,22 @@ The pawn will now show charge percentage in the Health tab (`Bionic Arm (74%)`),
 
 A wireless charger does **not** need `hasInteractionCell`. It still needs `CompPowerTrader` and `ChargeStationExtension`. See [Wireless Charge Component XML Reference](#wireless-charge-component-xml-reference).
 
+**5. (Optional) Make a hediff act as a pawn-carried battery for other rechargeable hediffs:**
+
+```xml
+<comps>
+    <li Class="Chargeable_Hediffs_Framework.HediffCompProperties_Rechargeable">
+        <maxCharge>500</maxCharge>
+    </li>
+    <li Class="Chargeable_Hediffs_Framework.HediffCompProperties_ChargeBattery">
+        <chargeRate>0.01</chargeRate>
+        <transferEfficiency>0.75</transferEfficiency>
+    </li>
+</comps>
+```
+
+The battery comp requires `HediffCompProperties_Rechargeable` on the same hediff. It drains its own charge and transfers it into the pawn's other rechargeable hediffs every tick, regardless of the pawn's spawned/awake/faction/caravan state. See [HediffCompProperties_ChargeBattery fields](#hediffcompproperties_chargebattery-fields).
+
 ---
 
 ## Hediff Comp XML Reference
@@ -138,6 +159,49 @@ A wireless charger does **not** need `hasInteractionCell`. It still needs `CompP
 </li>
 ```
 
+### HediffCompProperties_ChargeBattery fields
+
+`HediffCompProperties_ChargeBattery` turns a rechargeable hediff into a pawn-carried battery. It **requires** the same hediff to also have `HediffCompProperties_Rechargeable` - the battery drains that comp's store and transfers charge into the pawn's other rechargeable hediffs. A config error is logged if the rechargeable comp is missing.
+
+| Field                | Type              | Default | Description                                                                                                                              |
+| -------------------- | ----------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `chargeRate`         | `float`           | `0`     | Maximum charge drained from the battery's own store per tick, **before** efficiency is applied. Must be positive.                        |
+| `transferEfficiency` | `float`           | `1`     | Fraction of drained source charge delivered to the target. `0.75` means draining `1` from the battery adds `0.75` to the target. Must be `> 0` and `<= 1`. |
+| `supportedHediffs`   | `List<HediffDef>` | `null`  | Optional whitelist of target `HediffDef`s. Empty or `null` means any non-battery rechargeable hediff on the pawn is a valid target.       |
+| `excludedHediffs`    | `List<HediffDef>` | `null`  | Optional blacklist of target `HediffDef`s. Takes priority over `supportedHediffs`.                                                        |
+| `showInspectString`  | `bool`            | `true`  | Adds battery transfer rate, efficiency, and target info to the hediff's tooltip.                                                          |
+
+The battery uses **source-drain semantics**: `chargeRate` describes how much is drained from the battery, not how much the target gains.
+
+```
+source drain (per tick) = up to chargeRate
+target gain             = source drain * transferEfficiency
+```
+
+**Runtime behavior:**
+
+- Runs every tick the hediff ticks - it does **not** require the pawn to be spawned, awake, in the player faction, or in a caravan. This is an internal hediff-to-hediff transfer, not a station interaction.
+- Always targets the lowest-`ChargePercent` eligible rechargeable hediff on the pawn first. Ties break on the larger missing absolute charge, then on hediff list order.
+- Can drain itself all the way to `0`. There is no reserve.
+- **Battery hediffs never charge other battery hediffs**, even if XML filters would otherwise allow it - any hediff with a `HediffComp_ChargeBattery` is skipped unconditionally as a target.
+- Charge stations and wireless chargers can still recharge a battery hediff normally - the battery comp only changes how the hediff *spends* charge, not how it *receives* it.
+
+**Example with all fields:**
+
+```xml
+<li Class="Chargeable_Hediffs_Framework.HediffCompProperties_ChargeBattery">
+    <chargeRate>0.01</chargeRate>
+    <transferEfficiency>0.75</transferEfficiency>
+    <supportedHediffs>
+        <li>MyMod_BionicArm_Rechargeable</li>
+        <li>MyMod_BionicLeg_Rechargeable</li>
+    </supportedHediffs>
+    <excludedHediffs>
+        <li>MyMod_EmergencyImplant_DoNotAutoCharge</li>
+    </excludedHediffs>
+</li>
+```
+
 ### ChargeConsequenceProperties fields
 
 These penalties are active **only while the hediff's charge is zero** (`IsDepleted == true`). They are cached in the pawn's `CompChargeConsequencesCache` and applied through vanilla `ThingComp.GetStatOffset`/`GetStatFactor` hooks (stats) and a single Harmony postfix on `PawnCapacityUtility.CalculatePartEfficiency` (part efficiency). They do not create hediff stages or modify `CurStage`.
@@ -152,7 +216,7 @@ These penalties are active **only while the hediff's charge is zero** (`IsDeplet
 
 ### Understanding units
 
-`maxCharge`, `startingCharge`, `chargeDecayPerTick`, and `chargeRate` (on the station) all use the **same arbitrary unit**. You choose the scale; the framework does not enforce one. The only constraint is internal consistency between decay and recharge.
+`maxCharge`, `startingCharge`, `chargeDecayPerTick`, `chargeRate` (on the station), and `chargeRate` (on `HediffCompProperties_ChargeBattery`) all use the **same arbitrary unit**. You choose the scale; the framework does not enforce one. The only constraint is internal consistency between decay and recharge.
 
 **Useful reference values:**
 
@@ -186,6 +250,15 @@ effectiveChargeRate = PowerConsumption / 60000
 ```
 
 This creates a natural balance: if your station draws 200 W and your hediff has `maxCharge = 200`, one day of power fully recharges one hediff.
+
+**Battery `chargeRate` is a source-drain rate, not a target-gain rate:**
+
+```
+battery chargeRate    = 0.02
+transferEfficiency    = 0.75
+source drain per day  = 0.02 * 60000 = 1200
+target gain per day   = 1200 * 0.75 = 900
+```
 
 ---
 
@@ -516,6 +589,69 @@ If a modder wants the fallback charge rate derived from power consumption, omit 
 
 ---
 
+### Rechargeable battery implant
+
+An implanted battery that stores charge and transfers it to other powered implants on the same pawn. Requires both comps on the same hediff.
+
+```xml
+<HediffDef>
+    <defName>MyMod_InternalBattery</defName>
+    <label>internal charge battery</label>
+    <description>An implanted battery that stores charge and transfers it to other powered implants.</description>
+    <hediffClass>HediffWithComps</hediffClass>
+    <isBad>false</isBad>
+    <comps>
+        <li Class="Chargeable_Hediffs_Framework.HediffCompProperties_Rechargeable">
+            <maxCharge>500</maxCharge>
+            <chargeDecayPerTick>0</chargeDecayPerTick>
+        </li>
+        <li Class="Chargeable_Hediffs_Framework.HediffCompProperties_ChargeBattery">
+            <chargeRate>0.01</chargeRate>
+            <transferEfficiency>0.75</transferEfficiency>
+        </li>
+    </comps>
+</HediffDef>
+```
+
+Because `supportedHediffs` and `excludedHediffs` are omitted, this battery charges any non-battery rechargeable hediff on the pawn, prioritizing whichever has the lowest charge percent. A charge station or wireless charger can still recharge the battery itself normally.
+
+---
+
+### Battery with target whitelist/blacklist
+
+The same battery, restricted to specific target hediffs and with one explicit exception.
+
+```xml
+<HediffDef>
+    <defName>MyMod_InternalBattery</defName>
+    <label>internal charge battery</label>
+    <description>An implanted battery that stores charge and transfers it to other powered implants.</description>
+    <hediffClass>HediffWithComps</hediffClass>
+    <isBad>false</isBad>
+    <comps>
+        <li Class="Chargeable_Hediffs_Framework.HediffCompProperties_Rechargeable">
+            <maxCharge>500</maxCharge>
+            <chargeDecayPerTick>0</chargeDecayPerTick>
+        </li>
+        <li Class="Chargeable_Hediffs_Framework.HediffCompProperties_ChargeBattery">
+            <chargeRate>0.01</chargeRate>
+            <transferEfficiency>0.75</transferEfficiency>
+            <supportedHediffs>
+                <li>MyMod_BionicArm_Rechargeable</li>
+                <li>MyMod_BionicLeg_Rechargeable</li>
+            </supportedHediffs>
+            <excludedHediffs>
+                <li>MyMod_EmergencyImplant_DoNotAutoCharge</li>
+            </excludedHediffs>
+        </li>
+    </comps>
+</HediffDef>
+```
+
+`excludedHediffs` wins over `supportedHediffs` if a def somehow appears in both. Any hediff not in `supportedHediffs` is never charged by this battery, even if it would otherwise be a valid rechargeable target.
+
+---
+
 ## Public API
 
 All public types live in the `Chargeable_Hediffs_Framework` namespace. Reference the compiled `Chargeable Hediffs Framework.dll` in your project if you need C# integration.
@@ -559,6 +695,37 @@ HediffComp_Rechargeable comp = myHediff.TryGetComp<HediffComp_Rechargeable>();
 | -------------------------- | ------------------------------------------------------------- |
 | `CompLabelInBracketsExtra` | `74%` - shown in the hediff list label as `Bionic Arm (74%)`. |
 | `CompTipStringExtra`       | Charge: 74.0 / 100.0 (74%)\nDecay rate: 100.2 / day           |
+
+---
+
+### HediffComp_ChargeBattery
+
+```csharp
+public class HediffComp_ChargeBattery : HediffComp
+```
+
+Retrieve from any `HediffWithComps` that has the comp:
+
+```csharp
+HediffComp_ChargeBattery battery = myHediff.TryGetComp<HediffComp_ChargeBattery>();
+```
+
+Requires a `HediffComp_Rechargeable` on the same hediff - the battery drains that comp's `CurrentCharge` and calls `AddCharge`/`DrainCharge` on the affected comps, so notifications and depletion bookkeeping stay correct.
+
+**Properties**
+
+| Member  | Type                                | Description                                  |
+| ------- | ----------------------------------- | --------------------------------------------- |
+| `Props` | `HediffCompProperties_ChargeBattery` | Typed access to the comp's XML properties.   |
+
+**Runtime behavior**
+
+- `CompPostTickInterval` computes a drain budget of `Min(source.CurrentCharge, chargeRate * delta)`, then repeatedly finds the lowest-`ChargePercent` eligible target and fills it (or spends the remaining budget on it), draining the source and adding to the target via the existing `AddCharge`/`DrainCharge` methods.
+- Eligible targets exclude the source itself, any hediff with its own `HediffComp_ChargeBattery`, hediffs that don't `NeedsCharge`, and hediffs filtered out by `supportedHediffs`/`excludedHediffs`.
+- Does not call `IsPawnEligible` or `IsAutoRechargeEligible` - it only checks that the pawn and hediff set are non-null. Dead pawns, prisoners, and off-map pawns are not excluded.
+- `CompDebugString()` reports source charge, effective rate, efficiency, and the last transfer's stats (unsaved).
+
+Station and wireless-charge APIs (`HediffChargeUtility.ChargeAllFromStation`, `IsAutoRechargeEligible`, etc.) are unchanged and treat battery hediffs as ordinary rechargeable hediffs - they can still recharge a battery's own store.
 
 ---
 
@@ -698,6 +865,10 @@ Every pawn race `ThingDef` automatically receives a `CompChargeConsequencesCache
 ### Zero stat factors
 
 `depletedConsequences.statFactors` values must **not** be `0`. The cache stores a running product per stat and divides the factor back out on unregister; a zero factor cannot be divided out. Use a very small nonzero value (e.g. `0.001`) if you intend a near-total penalty. A config error is logged at startup if a zero factor is detected.
+
+### Battery-to-battery transfer
+
+`HediffComp_ChargeBattery` never charges another battery hediff. This is enforced by checking for the **presence of the `HediffComp_ChargeBattery` comp** on a candidate target's hediff, not by hediff def name or naming convention - so it is safe even if a target's `defName` doesn't hint that it's a battery. No Harmony patch is required for this behavior or for battery transfer in general; it runs entirely through `CompPostTickInterval`.
 
 ### Single resource type
 

@@ -46,8 +46,6 @@ namespace Chargeable_Hediffs_Framework
                 yield return $"{nameof(ChargeStationExtension)} may only be added to ThingDefs";
                 yield break;
             }
-            if (!parentDef.hasInteractionCell)
-                yield return $"{nameof(ChargeStationExtension)}: '{parentDef.defName}' must have hasInteractionCell = true";
             if (parentDef.GetCompProperties<CompProperties_Power>() == null)
                 yield return $"{nameof(ChargeStationExtension)}: '{parentDef.defName}' must have CompProperties_Power";
             if (chargeRate < 0f)

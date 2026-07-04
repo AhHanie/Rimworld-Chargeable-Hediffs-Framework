@@ -71,7 +71,9 @@
     <Compile Include="Charge\CompProperties_WirelessCharge.cs" />
     <Compile Include="Charge\CompWirelessCharge.cs" />
     <Compile Include="Charge\HediffChargeUtility.cs" />
+    <Compile Include="Charge\HediffComp_ChargeBattery.cs" />
     <Compile Include="Charge\HediffComp_Rechargeable.cs" />
+    <Compile Include="Charge\HediffCompProperties_ChargeBattery.cs" />
     <Compile Include="Charge\HediffCompProperties_Rechargeable.cs" />
     <Compile Include="DefModExtensions\ChargeStationExtension.cs" />
     <Compile Include="DefOfs\CHF_JobDefOf.cs" />

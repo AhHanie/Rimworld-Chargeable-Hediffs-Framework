@@ -7,7 +7,7 @@
         <li>1.6</li>
     </supportedVersions>
     <description>A framework for modders that gives any hediff an independent electrical charge store.</description>
-    <modVersion>1.0.0</modVersion>
+    <modVersion>1.1.0</modVersion>
     <url>https://steamcommunity.com/sharedfiles/filedetails/?id=3751642856</url>
     <modDependencies>
         <li>
