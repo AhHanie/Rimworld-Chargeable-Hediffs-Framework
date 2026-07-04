@@ -82,17 +82,20 @@ namespace Chargeable_Hediffs_Framework
             return pawn != null && !pawn.Dead && pawn.health?.hediffSet != null;
         }
 
-        // True if the pawn is a player-owned colonist, slave, or mechanoid that can be assigned
-        // auto-recharge work. Used by WorkGiver and Alert; not required for raw query helpers.
+        // True if the pawn is a player-controlled rechargeable target: colonists, slaves,
+        // colony animals, and colony mechs. Excludes prisoners. Used by WorkGiver, Alert, and
+        // CompWirelessCharge; not required for raw query helpers.
         public static bool IsAutoRechargeEligible(Pawn pawn)
         {
             if (!IsPawnEligible(pawn))
                 return false;
-            if (pawn.Faction == null || !pawn.Faction.IsPlayer)
+            if (pawn.IsPrisoner || pawn.IsPrisonerOfColony)
                 return false;
-            if (pawn.IsPrisoner || pawn.RaceProps.Animal)
-                return false;
-            return true;
+            if (pawn.Faction != null && pawn.Faction.IsPlayer)
+                return true;
+            if (pawn.IsSlaveOfColony || pawn.IsColonyMech || pawn.IsColonyAnimal)
+                return true;
+            return false;
         }
 
         // True if the thing is a registered charge station (extension present), ignoring powered state.

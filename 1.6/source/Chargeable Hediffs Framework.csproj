@@ -68,6 +68,8 @@
     <Compile Include="Charge\ChargeConsequenceProperties.cs" />
     <Compile Include="Charge\CompChargeConsequencesCache.cs" />
     <Compile Include="Charge\CompProperties_ChargeConsequencesCache.cs" />
+    <Compile Include="Charge\CompProperties_WirelessCharge.cs" />
+    <Compile Include="Charge\CompWirelessCharge.cs" />
     <Compile Include="Charge\HediffChargeUtility.cs" />
     <Compile Include="Charge\HediffComp_Rechargeable.cs" />
     <Compile Include="Charge\HediffCompProperties_Rechargeable.cs" />
@@ -77,6 +79,7 @@
     <Compile Include="Jobs\RechargeHediffBiotechFx.cs" />
     <Compile Include="UI\Alert_LowHediffCharge.cs" />
     <Compile Include="UI\FloatMenuOptionProvider_RechargeHediff.cs" />
+    <Compile Include="UI\PlaceWorker_ShowWirelessChargeRadius.cs" />
     <Compile Include="WorkGivers\WorkGiver_RechargeHediffs.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="Mod.cs" />

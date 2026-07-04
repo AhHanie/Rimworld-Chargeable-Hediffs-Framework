@@ -18,15 +18,21 @@
 - [Charge Station XML Reference](#charge-station-xml-reference)
   - [ChargeStationExtension fields](#chargestationextension-fields)
   - [Station requirements](#station-requirements)
+- [Wireless Charge Component XML Reference](#wireless-charge-component-xml-reference)
+  - [CompProperties_WirelessCharge fields](#compproperties_wirelesscharge-fields)
+  - [Wireless charger requirements](#wireless-charger-requirements)
 - [XML Examples](#xml-examples)
   - [Rechargeable bionic limb - no consequences](#rechargeable-bionic-limb--no-consequences)
   - [Rechargeable bionic limb - depleted stat penalties](#rechargeable-bionic-limb--depleted-stat-penalties)
   - [Rechargeable artificial organ - part efficiency penalty](#rechargeable-artificial-organ--part-efficiency-penalty)
   - [Charge station - open (accepts all hediffs)](#charge-station--open-accepts-all-hediffs)
   - [Charge station - hediff whitelist](#charge-station--hediff-whitelist)
+  - [Wireless charger - standalone building](#wireless-charger--standalone-building)
+  - [Wireless charging - patching an existing powered building](#wireless-charging--patching-an-existing-powered-building)
 - [Public API](#public-api)
   - [HediffComp_Rechargeable](#hediffcomp_rechargeable)
   - [HediffChargeUtility](#hediffchargeutility)
+  - [CompWirelessCharge](#compwirelesscharge)
 - [Compatibility Notes](#compatibility-notes)
 
 ---
@@ -42,6 +48,7 @@ Chargeable Hediffs Framework adds a reusable `HediffComp` that gives any hediff 
 - Automatic work assignment - colonists/slaves/player mechs seek charge stations when any eligible hediff falls below 20 %.
 - Right-click manual recharge - select a pawn, right-click a powered station, choose _Recharge_.
 - Low-charge alert - grouped alert when any eligible pawn's lowest hediff charge falls below the threshold.
+- Passive wireless charging - `CompWirelessCharge` scans a radius around a powered building at an interval and charges every eligible pawn found there, with no job or interaction cell required.
 
 ---
 
@@ -88,6 +95,19 @@ Three XML changes are all that is needed:
 **3. Ensure the building has `hasInteractionCell = true` and a `CompPowerTrader`** - that's it.
 
 The pawn will now show charge percentage in the Health tab (`Bionic Arm (74%)`), seek the station automatically when charge drops below 20 %, and accept manual recharge orders via right-click.
+
+**4. (Optional) Make the building charge wirelessly instead of - or in addition to - job-based charging:**
+
+```xml
+<comps>
+    <li Class="Chargeable_Hediffs_Framework.CompProperties_WirelessCharge">
+        <radius>8.9</radius>
+        <scanIntervalTicks>250</scanIntervalTicks>
+    </li>
+</comps>
+```
+
+A wireless charger does **not** need `hasInteractionCell`. It still needs `CompPowerTrader` and `ChargeStationExtension`. See [Wireless Charge Component XML Reference](#wireless-charge-component-xml-reference).
 
 ---
 
@@ -171,23 +191,67 @@ This creates a natural balance: if your station draws 200 W and your hediff has 
 
 ## Charge Station XML Reference
 
+`ChargeStationExtension` is shared by both charging modes described in this guide: job-based, interaction-cell stations (Quick Start steps 1-3) and passive wireless chargers (Quick Start step 4, and see [Wireless Charge Component XML Reference](#wireless-charge-component-xml-reference)). It always controls charge rate and hediff filtering, regardless of which mode delivers the charge.
+
 ### ChargeStationExtension fields
 
 | Field              | Type              | Default | Description                                                                                                                                                 |
 | ------------------ | ----------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `chargeRate`       | `float`           | `0`     | Charge added per tick to each eligible hediff while a pawn occupies this station. When `0`, falls back to `PowerConsumption / 60000`. Must not be negative. |
+| `chargeRate`       | `float`           | `0`     | Charge added per tick to each eligible hediff while a pawn occupies this station or is in range of a wireless charger. When `0`, falls back to `PowerConsumption / 60000`. Must not be negative. |
 | `supportedHediffs` | `List<HediffDef>` | `null`  | Whitelist of `HediffDef` names this station can service. Empty or `null` means **all rechargeable hediffs** are accepted.                                   |
 
 ### Station requirements
 
-The framework validates these at game load and logs config errors if they are missing:
+The framework validates these at game load and logs config errors if they are missing. Requirements differ by charging mode:
 
-1. The `ThingDef` must have **`hasInteractionCell = true`**.
-2. The `ThingDef` must have a **`CompPowerTrader`** comp (`CompProperties_Power`).
+**Both modes require:**
+
+1. A **`CompPowerTrader`** comp (`CompProperties_Power`).
+2. A **`ChargeStationExtension`** mod extension.
 3. `chargeRate` must be `>= 0` (zero uses the power-consumption fallback).
 4. All entries in `supportedHediffs` must resolve to valid `HediffDef`s.
 
+**Interaction-cell (job-based) stations additionally require:**
+
+- `hasInteractionCell = true`, so a pawn has somewhere to stand while working the recharge job.
+
+**Wireless chargers do not need `hasInteractionCell`** - see [Wireless charger requirements](#wireless-charger-requirements) for the additional fields `CompProperties_WirelessCharge` validates.
+
 The building does **not** need to extend any special class. Any `ThingDef` that meets the requirements above works as a charge station.
+
+---
+
+## Wireless Charge Component XML Reference
+
+`CompProperties_WirelessCharge` adds passive, jobless charging to any powered building. Instead of a pawn walking to an interaction cell and running a job, the building itself scans a radius around it on an interval and charges every eligible pawn found there directly.
+
+### CompProperties_WirelessCharge fields
+
+| Field                | Type    | Default | Description                                                                                                   |
+| -------------------- | ------- | ------- | --------------------------------------------------------------------------------------------------------------- |
+| `radius`             | `float` | `6.9`   | Radius, in cells, scanned around the building. Must be positive and below `GenRadial.MaxRadialPatternRadius`. |
+| `scanIntervalTicks`  | `int`   | `250`   | How often the building scans for pawns to charge, in ticks. `250` ticks is 1 in-game hour. Must be positive.  |
+| `drawRadius`         | `bool`  | `true`  | Draws a radius ring around the building while it is selected.                                                 |
+| `showInspectString`  | `bool`  | `true`  | Adds radius, interval, and last-scan-result lines to the building's inspect string.                           |
+
+### Wireless charger requirements
+
+In addition to the shared [station requirements](#station-requirements) (`CompPowerTrader` and `ChargeStationExtension`), the framework validates:
+
+- `radius > 0` and `radius < GenRadial.MaxRadialPatternRadius`.
+- `scanIntervalTicks > 0`.
+
+`hasInteractionCell` is **not** required - wireless charging does not use pathing or jobs.
+
+To show the radius ring while placing the blueprint (not just while selected), add the place worker:
+
+```xml
+<placeWorkers>
+    <li>Chargeable_Hediffs_Framework.PlaceWorker_ShowWirelessChargeRadius</li>
+</placeWorkers>
+```
+
+The selected-state radius ring is drawn automatically by the comp and does not need this place worker.
 
 ---
 
@@ -374,6 +438,84 @@ A specialized charger that only services specific hediffs, with an explicit char
 
 ---
 
+### Wireless charger - standalone building
+
+A powered pylon that passively charges any rechargeable hediff on nearby colony pawns. No `hasInteractionCell`, no job, no pathing.
+
+```xml
+<ThingDef ParentName="BuildingBase">
+    <defName>MyMod_WirelessCharger</defName>
+    <label>wireless charge pylon</label>
+    <description>A powered pylon that wirelessly recharges nearby colonists', slaves', animals', and mechs' powered bionics and implants.</description>
+    <graphicData>
+        <texPath>Things/Building/MyMod_WirelessCharger</texPath>
+        <graphicClass>Graphic_Single</graphicClass>
+    </graphicData>
+    <size>(1,1)</size>
+
+    <statBases>
+        <MaxHitPoints>150</MaxHitPoints>
+        <WorkToBuild>2000</WorkToBuild>
+        <Flammability>0.5</Flammability>
+    </statBases>
+
+    <comps>
+        <!-- Required: the charger must be a power consumer -->
+        <li Class="CompProperties_Power">
+            <compClass>CompPowerTrader</compClass>
+            <basePowerConsumption>200</basePowerConsumption>
+        </li>
+        <li Class="CompProperties_Flickable" />
+        <!-- Required: makes this building scan and charge wirelessly -->
+        <li Class="Chargeable_Hediffs_Framework.CompProperties_WirelessCharge">
+            <radius>8.9</radius>
+            <scanIntervalTicks>250</scanIntervalTicks>
+        </li>
+    </comps>
+
+    <modExtensions>
+        <!-- chargeRate defaults to 200 / 60000 ≈ 0.00333 per tick per eligible hediff -->
+        <li Class="Chargeable_Hediffs_Framework.ChargeStationExtension" />
+    </modExtensions>
+
+    <!-- Optional: shows the charge radius while placing the blueprint -->
+    <placeWorkers>
+        <li>Chargeable_Hediffs_Framework.PlaceWorker_ShowWirelessChargeRadius</li>
+    </placeWorkers>
+</ThingDef>
+```
+
+---
+
+### Wireless charging - patching an existing powered building
+
+Add wireless charging to a building your mod (or another mod) already defines, as long as it has `CompPowerTrader`. If the building doesn't have `ChargeStationExtension` yet, add both operations; if it already has one, only add the comp.
+
+```xml
+<Operation Class="PatchOperationAdd">
+    <xpath>/Defs/ThingDef[defName="MyMod_WirelessCharger"]/comps</xpath>
+    <value>
+        <li Class="Chargeable_Hediffs_Framework.CompProperties_WirelessCharge">
+            <radius>8.9</radius>
+            <scanIntervalTicks>250</scanIntervalTicks>
+        </li>
+    </value>
+</Operation>
+
+<Operation Class="PatchOperationAddModExtension">
+    <xpath>/Defs/ThingDef[defName="MyMod_WirelessCharger"]</xpath>
+    <value>
+        <li Class="Chargeable_Hediffs_Framework.ChargeStationExtension">
+            <chargeRate>0.00333</chargeRate>
+        </li>
+    </value>
+</Operation>
+```
+
+If a modder wants the fallback charge rate derived from power consumption, omit `chargeRate` or set it to `0`.
+
+---
+
 ## Public API
 
 All public types live in the `Chargeable_Hediffs_Framework` namespace. Reference the compiled `Chargeable Hediffs Framework.dll` in your project if you need C# integration.
@@ -447,7 +589,7 @@ A static utility with no shared state that mutates between calls. Safe to call f
 | Method                                                          | Description                                                                                                                         |
 | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `IsPawnEligible(Pawn pawn)`                                     | Basic null / dead / hediff-set guard. Returns `false` when pawn cannot be queried.                                                  |
-| `IsAutoRechargeEligible(Pawn pawn)`                             | Returns `true` for player-owned colonists, slaves, and mechanoids. Returns `false` for prisoners, animals, enemies, and dead pawns. |
+| `IsAutoRechargeEligible(Pawn pawn)`                             | Returns `true` for player-controlled colonists, slaves, colony animals, and colony mechs. Returns `false` for prisoners, enemies, wild animals, and dead pawns. Used by `WorkGiver_RechargeHediffs`, `Alert_LowHediffCharge`, `FloatMenuOptionProvider_RechargeHediff`, and `CompWirelessCharge`. |
 | `IsChargeStation(Thing thing)`                                  | Returns `true` when the thing has a `ChargeStationExtension`. Does not check power state.                                           |
 | `IsStationPowered(Thing thing)`                                 | Returns `true` when the thing's `CompPowerTrader` reports power is on.                                                              |
 | `IsValidStation(Thing station)`                                 | Returns `true` when the station is both a registered charge station and currently powered.                                          |
@@ -489,6 +631,30 @@ foreach (var comp in tempList)
 
 ---
 
+### CompWirelessCharge
+
+```csharp
+public class CompWirelessCharge : ThingComp
+```
+
+Retrieve from the parent building's comps:
+
+```csharp
+CompWirelessCharge comp = building.GetComp<CompWirelessCharge>();
+```
+
+Added to a `ThingDef` via `CompProperties_WirelessCharge`. See [Wireless Charge Component XML Reference](#wireless-charge-component-xml-reference) for the XML fields.
+
+**Behavior**
+
+- Caches the parent's `CompPowerTrader` on spawn. Does nothing while unpowered.
+- Scans `parent.Map.mapPawns.AllPawnsSpawned` every `scanIntervalTicks`, using `Position.InHorDistOf` against `radius`. No per-tick work and no `GenRadial` cell walk.
+- For every pawn in range that passes `HediffChargeUtility.IsAutoRechargeEligible`, calls `HediffChargeUtility.ChargeAllFromStation(pawn, parent, elapsed)`, where `elapsed` is the actual number of ticks since the last scan (not just `scanIntervalTicks`), so charge stays correct even if a scan is delayed.
+- Does not reserve, path to, or otherwise interact with pawns - there is no job, so overlapping wireless chargers simply stack: every powered charger covering a pawn charges it independently on its own schedule.
+- Draws its radius ring when the parent is selected (`PostDrawExtraSelectionOverlays`), gated by `drawRadius`.
+
+---
+
 ## Compatibility Notes
 
 ### No required base classes
@@ -503,7 +669,13 @@ The `HediffComp_Rechargeable` comp can be added to **any** `HediffWithComps` hed
 
 ### No required building class
 
-The `ChargeStationExtension` can be added to **any** `ThingDef` that has `hasInteractionCell = true` and `CompPowerTrader`. Your building class can remain `Building` or any subclass.
+The `ChargeStationExtension` can be added to **any** `ThingDef` that has a `CompPowerTrader`, and `hasInteractionCell = true` if it is used for job-based charging. Your building class can remain `Building` or any subclass.
+
+### Wireless charging behavior
+
+- **Overlaps stack.** Wireless chargers do not coordinate with each other. If a pawn is in range of two powered chargers, both charge it independently every scan, so charge gain roughly doubles.
+- **Scans are interval-based, not per-tick.** Each `CompWirelessCharge` only scans for pawns every `scanIntervalTicks`, and charges for the actual elapsed ticks since the previous scan - there is no per-tick cost proportional to map pawn count.
+- **Eligibility matches `IsAutoRechargeEligible`.** Wireless charging (and now the low-charge alert and auto-recharge work giver) affects player-controlled colonists, slaves, colony animals, and colony mechs. It does **not** affect prisoners, neutral guests, hostile pawns, or wild animals.
 
 ### Harmony patch scope
 

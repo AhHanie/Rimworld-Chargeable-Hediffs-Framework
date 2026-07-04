@@ -14,4 +14,10 @@
     <CHF_DebugDrainChargeTen>DEV: {0} drain 10%</CHF_DebugDrainChargeTen>
     <CHF_DebugDrainChargeTenDesc>Drain 10% of {0}'s maximum charge. Current charge: {1} / {2}.</CHF_DebugDrainChargeTenDesc>
     <CHF_StatsReport_DepletedCharge>Depleted charge</CHF_StatsReport_DepletedCharge>
+    <CHF_Ticks>ticks</CHF_Ticks>
+    <CHF_WirelessChargeRadius>Wireless charge radius</CHF_WirelessChargeRadius>
+    <CHF_WirelessChargeInterval>Wireless charge interval</CHF_WirelessChargeInterval>
+    <CHF_WirelessChargeLastResult>Last wireless charge</CHF_WirelessChargeLastResult>
+    <CHF_WirelessChargeTargets>pawns</CHF_WirelessChargeTargets>
+    <CHF_WirelessChargeHediffs>hediffs</CHF_WirelessChargeHediffs>
 </LanguageData>
