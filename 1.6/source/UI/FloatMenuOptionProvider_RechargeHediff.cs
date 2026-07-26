@@ -20,7 +20,7 @@ namespace Chargeable_Hediffs_Framework
             if (pawn == null)
                 return null;
 
-            if (!HediffChargeUtility.IsAutoRechargeEligible(pawn))
+            if (!HediffChargeUtility.IsEligibleForJobBasedRecharge(pawn))
                 return null;
 
             if (!HediffChargeUtility.HasRechargeableHediffs(pawn))

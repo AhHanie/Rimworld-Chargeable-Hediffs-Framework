@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Defs>
+
+    <!-- Note: You cannot reorder elements in this file or move this def to a different file
+         without destroying saved trainability data; see DefMap<>.ExposeData(). -->
+
+    <TrainableDef>
+        <defName>CHF_SelfCharge</defName>
+        <label>self-charge</label>
+        <description>The animal will autonomously seek out a powered charge station and recharge its own rechargeable implants when their charge runs low, the same way a colonist would.</description>
+        <icon>UI/Icons/Trainables/Haul</icon>
+        <!-- Between vanilla Rescue (600) and Haul (400): a genuinely trainable, obedient animal
+             behavior, but not as universally expected as hauling. -->
+        <listPriority>500</listPriority>
+        <difficulty>250</difficulty>
+        <requiredTrainability>Advanced</requiredTrainability>
+        <steps>3</steps>
+        <prerequisites>
+            <li>Obedience</li>
+        </prerequisites>
+        <defaultTrainable>true</defaultTrainable>
+        <tags>
+            <li>Work</li>
+        </tags>
+    </TrainableDef>
+
+</Defs>

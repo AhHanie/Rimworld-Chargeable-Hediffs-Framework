@@ -23,6 +23,9 @@ namespace Chargeable_Hediffs_Framework
             this.FailOn(() => !HediffChargeUtility.IsValidStation(Station));
             // Cancel if the pawn's rechargeable hediffs that this station services all disappear.
             this.FailOn(() => !HediffChargeUtility.HasChargeableByStation(pawn, Station));
+            // Cancel a colony animal's self-directed job if it loses its self-charge authorization
+            // mid-job (training decay, catalyst removal). No-op for non-animal pawns.
+            this.FailOn(() => pawn.IsColonyAnimal && !HediffChargeUtility.IsAnimalAuthorizedToSelfCharge(pawn));
 
             yield return Toils_Goto.GotoThing(StationInd, PathEndMode.InteractionCell)
                 .FailOnForbidden(StationInd);

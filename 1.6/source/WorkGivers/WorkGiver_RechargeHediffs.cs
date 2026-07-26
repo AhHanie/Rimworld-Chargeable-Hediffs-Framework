@@ -11,7 +11,7 @@ namespace Chargeable_Hediffs_Framework
 
         public override bool ShouldSkip(Pawn pawn, bool forced = false)
         {
-            if (!HediffChargeUtility.IsAutoRechargeEligible(pawn))
+            if (!HediffChargeUtility.IsEligibleForJobBasedRecharge(pawn))
                 return true;
             if (!forced && !HediffChargeUtility.NeedsRecharge(pawn, HediffChargeUtility.AutoRechargeThreshold))
                 return true;

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Defs>
+
+    <!-- Inserted at RimWorld's Animal_PreWander hook (see Core/Defs/ThinkTreeDefs/Animal.xml),
+         which both the core Animal and Insect think trees expose. Races with a fully custom main
+         think tree must expose the same hook, or receive their own compatibility patch, to opt
+         into self-charging AI. -->
+    <ThinkTreeDef>
+        <defName>CHF_AnimalSelfCharge</defName>
+        <insertTag>Animal_PreWander</insertTag>
+        <!-- ThinkNode_SubtreesByTag sorts trees sharing a tag by descending insertPriority.
+             100 runs ahead of ordinary idle-wander behavior while still leaving room above for
+             other mods that need to preempt self-charging at this same hook. -->
+        <insertPriority>100</insertPriority>
+        <thinkRoot Class="Chargeable_Hediffs_Framework.ThinkNode_ConditionalAnimalSelfCharge">
+            <subNodes>
+                <li Class="ThinkNode_Tagger">
+                    <tagToGive>TrainedAnimalBehavior</tagToGive>
+                    <subNodes>
+                        <li Class="Chargeable_Hediffs_Framework.JobGiver_AnimalRechargeHediffs" />
+                    </subNodes>
+                </li>
+            </subNodes>
+        </thinkRoot>
+    </ThinkTreeDef>
+
+</Defs>

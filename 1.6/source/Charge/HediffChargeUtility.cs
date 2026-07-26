@@ -83,8 +83,9 @@ namespace Chargeable_Hediffs_Framework
         }
 
         // True if the pawn is a player-controlled rechargeable target: colonists, slaves,
-        // colony animals, and colony mechs. Excludes prisoners. Used by WorkGiver, Alert, and
-        // CompWirelessCharge; not required for raw query helpers.
+        // colony animals, and colony mechs. Excludes prisoners. Used directly by Alert and
+        // CompWirelessCharge, and as the base rule for IsEligibleForJobBasedRecharge below;
+        // not required for raw query helpers.
         public static bool IsAutoRechargeEligible(Pawn pawn)
         {
             if (!IsPawnEligible(pawn))
@@ -96,6 +97,42 @@ namespace Chargeable_Hediffs_Framework
             if (pawn.IsSlaveOfColony || pawn.IsColonyMech || pawn.IsColonyAnimal)
                 return true;
             return false;
+        }
+
+        // True if the pawn is a live colony animal candidate for animal-specific policy checks:
+        // alive, has a hediff set, is a colony animal, and is not a prisoner.
+        public static bool IsColonyAnimalCandidate(Pawn pawn)
+        {
+            if (!IsPawnEligible(pawn))
+                return false;
+            if (pawn.IsPrisoner || pawn.IsPrisonerOfColony)
+                return false;
+            return pawn.IsColonyAnimal;
+        }
+
+        // True if a colony animal is authorized to autonomously seek out a job-based charge
+        // station: it carries the Odyssey SentienceCatalyst hediff, or it has learned the
+        // framework's CHF_SelfCharge training. Merely wanting the training is not sufficient.
+        public static bool IsAnimalAuthorizedToSelfCharge(Pawn pawn)
+        {
+            if (!IsColonyAnimalCandidate(pawn))
+                return false;
+            if (ModsConfig.OdysseyActive && pawn.health.hediffSet.HasHediff(HediffDefOf.SentienceCatalyst))
+                return true;
+            return pawn.training != null && pawn.training.HasLearned(CHF_TrainableDefOf.CHF_SelfCharge);
+        }
+
+        // True if the pawn may use the framework's job-based station workflow (WorkGiver, manual
+        // float-menu order, and the autonomous animal AI job giver). Non-animals keep the existing
+        // automatic-eligibility rule; colony animals additionally require self-charge authorization.
+        // Passive wireless charging does not use this helper; see IsAutoRechargeEligible.
+        public static bool IsEligibleForJobBasedRecharge(Pawn pawn)
+        {
+            if (!IsAutoRechargeEligible(pawn))
+                return false;
+            if (pawn.IsColonyAnimal)
+                return IsAnimalAuthorizedToSelfCharge(pawn);
+            return true;
         }
 
         // True if the thing is a registered charge station (extension present), ignoring powered state.

@@ -65,6 +65,8 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AnimalAI\JobGiver_AnimalRechargeHediffs.cs" />
+    <Compile Include="AnimalAI\ThinkNode_ConditionalAnimalSelfCharge.cs" />
     <Compile Include="Charge\ChargeConsequenceProperties.cs" />
     <Compile Include="Charge\CompChargeConsequencesCache.cs" />
     <Compile Include="Charge\CompProperties_ChargeConsequencesCache.cs" />
@@ -77,6 +79,7 @@
     <Compile Include="Charge\HediffCompProperties_Rechargeable.cs" />
     <Compile Include="DefModExtensions\ChargeStationExtension.cs" />
     <Compile Include="DefOfs\CHF_JobDefOf.cs" />
+    <Compile Include="DefOfs\CHF_TrainableDefOf.cs" />
     <Compile Include="Jobs\JobDriver_RechargeHediffs.cs" />
     <Compile Include="Jobs\RechargeHediffBiotechFx.cs" />
     <Compile Include="UI\Alert_LowHediffCharge.cs" />
@@ -85,10 +88,12 @@
     <Compile Include="WorkGivers\WorkGiver_RechargeHediffs.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="Mod.cs" />
+    <Compile Include="Patches\Patch_Pawn_GetGizmos_AnimalHediffDebug.cs" />
     <Compile Include="Patches\Patch_PawnCapacityUtility_RechargeableHediff.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
+    <Folder Include="AnimalAI\" />
     <Folder Include="DefModExtensions\" />
     <Folder Include="Jobs\" />
     <Folder Include="Patches\" />

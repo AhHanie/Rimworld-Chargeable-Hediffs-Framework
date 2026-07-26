@@ -22,6 +22,7 @@
 - [Wireless Charge Component XML Reference](#wireless-charge-component-xml-reference)
   - [CompProperties_WirelessCharge fields](#compproperties_wirelesscharge-fields)
   - [Wireless charger requirements](#wireless-charger-requirements)
+- [Animal Self-Charging](#animal-self-charging)
 - [XML Examples](#xml-examples)
   - [Rechargeable bionic limb - no consequences](#rechargeable-bionic-limb--no-consequences)
   - [Rechargeable bionic limb - depleted stat penalties](#rechargeable-bionic-limb--depleted-stat-penalties)
@@ -54,6 +55,7 @@ Chargeable Hediffs Framework adds a reusable `HediffComp` that gives any hediff 
 - Right-click manual recharge - select a pawn, right-click a powered station, choose _Recharge_.
 - Low-charge alert - grouped alert when any eligible pawn's lowest hediff charge falls below the threshold.
 - Passive wireless charging - `CompWirelessCharge` scans a radius around a powered building at an interval and charges every eligible pawn found there, with no job or interaction cell required.
+- Animal self-charging - a colony animal with the Odyssey `SentienceCatalyst` hediff or the framework's `CHF_SelfCharge` training autonomously seeks out a job-based charge station on its own, the same way a colonist would.
 
 ---
 
@@ -325,6 +327,26 @@ To show the radius ring while placing the blueprint (not just while selected), a
 ```
 
 The selected-state radius ring is drawn automatically by the comp and does not need this place worker.
+
+---
+
+## Animal Self-Charging
+
+Colony animals do not automatically use job-based charge stations the way colonists, slaves, and colony mechs do. An animal must first be **authorized**, through either of two independent routes:
+
+1. It has the Odyssey `HediffDefOf.SentienceCatalyst` hediff (checked only when `ModsConfig.OdysseyActive`).
+2. It has learned the framework's `CHF_SelfCharge` `TrainableDef` - a normal Training-tab trainable (`Advanced` trainability, prerequisite `Obedience`, 3 steps). Merely queuing the training as "wanted" is not enough; it must be fully learned.
+
+Once authorized, an animal behaves exactly like a colonist: when its lowest rechargeable hediff's charge falls below the normal 20 % (`HediffChargeUtility.AutoRechargeThreshold`), it reserves and walks to the closest powered, compatible, reachable station and charges via the same `CHF_RechargeHediffs` job. Station requirements, `supportedHediffs` filtering, and charge-rate math are all unchanged - see [Charge Station XML Reference](#charge-station-xml-reference).
+
+**This only affects job-based stations.** Passive [wireless charging](#wireless-charge-component-xml-reference) is untouched: any eligible pawn (including an unauthorized animal) inside a wireless charger's radius is still charged automatically, because there is no job or seek-out behavior involved. The [low-charge alert](#compwirelesscharge) also still reports every eligible pawn below the threshold regardless of self-charge authorization, since the player may still need to act.
+
+### How it's implemented
+
+- `HediffChargeUtility.IsAnimalAuthorizedToSelfCharge(Pawn)` centralizes the authorization check described above. `HediffChargeUtility.IsEligibleForJobBasedRecharge(Pawn)` builds on it: non-animals keep the existing `IsAutoRechargeEligible` rule, while colony animals additionally require authorization. `WorkGiver_RechargeHediffs` and `FloatMenuOptionProvider_RechargeHediff` both use this helper, so an unauthorized animal never receives a manual right-click recharge order either.
+- The autonomous behavior is injected via RimWorld's `Animal_PreWander` `ThinkTreeDef` insertion hook (see `Core/Defs/ThinkTreeDefs/Animal.xml`), not an XPath patch to `Animal.xml`. Both the core `Animal` and `Insect` think trees expose this hook.
+- **If your race uses a completely custom main think tree** (i.e. it does not inherit from or subtree into the core `Animal`/`Insect` trees), it will not receive self-charging AI unless it also exposes an `Animal_PreWander`-tagged insertion point, or you ship a compatibility patch that adds the framework's `CHF_AnimalSelfCharge` subtree directly.
+- `JobDriver_RechargeHediffs` fails an in-progress job if a colony animal loses its authorization mid-job (training decay, catalyst removal). This has no effect on humanlike pawns or mechs.
 
 ---
 
@@ -756,7 +778,10 @@ A static utility with no shared state that mutates between calls. Safe to call f
 | Method                                                          | Description                                                                                                                         |
 | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `IsPawnEligible(Pawn pawn)`                                     | Basic null / dead / hediff-set guard. Returns `false` when pawn cannot be queried.                                                  |
-| `IsAutoRechargeEligible(Pawn pawn)`                             | Returns `true` for player-controlled colonists, slaves, colony animals, and colony mechs. Returns `false` for prisoners, enemies, wild animals, and dead pawns. Used by `WorkGiver_RechargeHediffs`, `Alert_LowHediffCharge`, `FloatMenuOptionProvider_RechargeHediff`, and `CompWirelessCharge`. |
+| `IsAutoRechargeEligible(Pawn pawn)`                             | Returns `true` for player-controlled colonists, slaves, colony animals, and colony mechs. Returns `false` for prisoners, enemies, wild animals, and dead pawns. Used by `Alert_LowHediffCharge` and `CompWirelessCharge`. |
+| `IsColonyAnimalCandidate(Pawn pawn)`                            | Returns `true` for an alive, non-prisoner colony animal. Basic guard used by the self-charge authorization helpers.                                                                |
+| `IsAnimalAuthorizedToSelfCharge(Pawn pawn)`                     | Returns `true` for a colony animal that has the Odyssey `SentienceCatalyst` hediff, or has learned `CHF_SelfCharge`. See [Animal Self-Charging](#animal-self-charging).             |
+| `IsEligibleForJobBasedRecharge(Pawn pawn)`                      | Job-based (`WorkGiver`/float-menu/animal AI) eligibility. Same as `IsAutoRechargeEligible` for non-animals; colony animals additionally require `IsAnimalAuthorizedToSelfCharge`. Used by `WorkGiver_RechargeHediffs`, `FloatMenuOptionProvider_RechargeHediff`, and `JobGiver_AnimalRechargeHediffs`. |
 | `IsChargeStation(Thing thing)`                                  | Returns `true` when the thing has a `ChargeStationExtension`. Does not check power state.                                           |
 | `IsStationPowered(Thing thing)`                                 | Returns `true` when the thing's `CompPowerTrader` reports power is on.                                                              |
 | `IsValidStation(Thing station)`                                 | Returns `true` when the station is both a registered charge station and currently powered.                                          |
@@ -842,19 +867,20 @@ The `ChargeStationExtension` can be added to **any** `ThingDef` that has a `Comp
 
 - **Overlaps stack.** Wireless chargers do not coordinate with each other. If a pawn is in range of two powered chargers, both charge it independently every scan, so charge gain roughly doubles.
 - **Scans are interval-based, not per-tick.** Each `CompWirelessCharge` only scans for pawns every `scanIntervalTicks`, and charges for the actual elapsed ticks since the previous scan - there is no per-tick cost proportional to map pawn count.
-- **Eligibility matches `IsAutoRechargeEligible`.** Wireless charging (and now the low-charge alert and auto-recharge work giver) affects player-controlled colonists, slaves, colony animals, and colony mechs. It does **not** affect prisoners, neutral guests, hostile pawns, or wild animals.
+- **Eligibility matches `IsAutoRechargeEligible`.** Wireless charging and the low-charge alert affect player-controlled colonists, slaves, colony animals, and colony mechs. They do **not** affect prisoners, neutral guests, hostile pawns, or wild animals. The job-based auto-recharge work giver additionally requires colony animals to be self-charge authorized - see [Animal Self-Charging](#animal-self-charging).
 
 ### Harmony patch scope
 
-The framework applies one narrow Harmony postfix patch:
+The framework applies two narrow Harmony postfix patches:
 
 | Patch target                                  | Purpose                                                                                                                     |
 | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `PawnCapacityUtility.CalculatePartEfficiency` | Reads the pawn's `CompChargeConsequencesCache` for a cached part efficiency offset and adds it when the hediff is depleted. |
+| `Pawn.GetGizmos`                              | Dev-mode only: appends `Pawn_HealthTracker.GetGizmos()` (every `HediffComp`'s gizmos, including this framework's debug charge tools) for colony animals. Vanilla only calls it for `IsColonistPlayerControlled`, `IsColonyMech`, or `IsPrisonerOfColony` pawns, so without this patch a rechargeable hediff's debug gizmos are unreachable on an animal even with dev mode on. |
 
 Stat offsets and stat factors are applied through vanilla `ThingComp.GetStatOffset` and `ThingComp.GetStatFactor`, which `StatWorker.GetValueUnfinalized` already calls on every pawn comp - no Harmony patch is needed for stats.
 
-The patch is **read-only** (modifies the return value only) and does a single dictionary lookup per queried body part with no allocations.
+The `CalculatePartEfficiency` patch is **read-only** (modifies the return value only) and does a single dictionary lookup per queried body part with no allocations. The `Pawn.GetGizmos` patch only does any work when `DebugSettings.ShowDevGizmos` is true, and only for colony animals - it is a no-op in normal play for every other pawn type.
 
 No other vanilla methods are patched.
 
