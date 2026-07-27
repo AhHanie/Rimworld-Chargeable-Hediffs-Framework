@@ -8,7 +8,7 @@
         <defName>CHF_SelfCharge</defName>
         <label>self-charge</label>
         <description>The animal will autonomously seek out a powered charge station and recharge its own rechargeable implants when their charge runs low, the same way a colonist would.</description>
-        <icon>UI/Icons/Trainables/Haul</icon>
+        <icon>CHF/UI/Icons/Trainable_SelfCharge</icon>
         <!-- Between vanilla Rescue (600) and Haul (400): a genuinely trainable, obedient animal
              behavior, but not as universally expected as hauling. -->
         <listPriority>500</listPriority>
