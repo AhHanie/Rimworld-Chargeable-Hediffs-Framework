@@ -23,6 +23,7 @@
   - [CompProperties_WirelessCharge fields](#compproperties_wirelesscharge-fields)
   - [Wireless charger requirements](#wireless-charger-requirements)
 - [Animal Self-Charging](#animal-self-charging)
+- [Ghoul Recharging](#ghoul-recharging)
 - [XML Examples](#xml-examples)
   - [Rechargeable bionic limb - no consequences](#rechargeable-bionic-limb--no-consequences)
   - [Rechargeable bionic limb - depleted stat penalties](#rechargeable-bionic-limb--depleted-stat-penalties)
@@ -52,10 +53,11 @@ Chargeable Hediffs Framework adds a reusable `HediffComp` that gives any hediff 
 - `HediffComp_ChargeBattery` - turns a rechargeable hediff into a pawn-carried battery that drains itself to charge other rechargeable hediffs on the same pawn, with configurable rate, efficiency, and target filtering.
 - `ChargeStationExtension` - marks any powered `ThingDef` as a charge station.
 - Automatic work assignment - colonists/slaves/player mechs seek charge stations when any eligible hediff falls below 20 %.
-- Right-click manual recharge - select a pawn, right-click a powered station, choose _Recharge_.
+- Right-click manual recharge - select a pawn, right-click a powered station, choose _Recharge_. Works for colonists, slaves, colony mechs, colony animals, and player-owned ghouls.
 - Low-charge alert - grouped alert when any eligible pawn's lowest hediff charge falls below the threshold.
 - Passive wireless charging - `CompWirelessCharge` scans a radius around a powered building at an interval and charges every eligible pawn found there, with no job or interaction cell required.
 - Animal self-charging - a colony animal with the Odyssey `SentienceCatalyst` hediff or the framework's `CHF_SelfCharge` training autonomously seeks out a job-based charge station on its own, the same way a colonist would.
+- Ghoul self-charging - a player-owned Anomaly ghoul autonomously seeks out a job-based charge station on its own, without needing any training or authorization. See [Ghoul Recharging](#ghoul-recharging).
 
 ---
 
@@ -347,6 +349,24 @@ Once authorized, an animal behaves exactly like a colonist: when its lowest rech
 - The autonomous behavior is injected via RimWorld's `Animal_PreWander` `ThinkTreeDef` insertion hook (see `Core/Defs/ThinkTreeDefs/Animal.xml`), not an XPath patch to `Animal.xml`. Both the core `Animal` and `Insect` think trees expose this hook.
 - **If your race uses a completely custom main think tree** (i.e. it does not inherit from or subtree into the core `Animal`/`Insect` trees), it will not receive self-charging AI unless it also exposes an `Animal_PreWander`-tagged insertion point, or you ship a compatibility patch that adds the framework's `CHF_AnimalSelfCharge` subtree directly.
 - `JobDriver_RechargeHediffs` fails an in-progress job if a colony animal loses its authorization mid-job (training decay, catalyst removal). This has no effect on humanlike pawns or mechs.
+
+---
+
+## Ghoul Recharging
+
+A player-owned Anomaly ghoul with a rechargeable hediff recharges autonomously and can receive a manual right-click recharge order, the same way a colonist can - but ghouls reach this behavior differently than colonists, mechs, and animals do.
+
+Ghouls have `AllWork` disabled and never run `JobGiver_Work`, so they cannot be assigned work by any `WorkGiver`, including `WorkGiver_RechargeHediffs`. Instead, the framework injects a low-priority think node directly into Anomaly's `Ghoul` think tree at its `Ghoul_PreWander` insertion hook (see `Data/Anomaly/Defs/ThinkTreeDefs/Ghoul.xml`), immediately before the tree falls back to wandering. Vanilla ghoul behavior with higher priority - downed/burning handling, mental states, immediate threat response, medical rest, food, drafted orders, and lord duty - all still runs first; self-charging only preempts idle wandering when a compatible powered station is actually needed.
+
+Unlike animal self-charging, **ghouls need no training or authorization** - every player-owned ghoul is eligible as soon as it has a rechargeable hediff. They keep the same 20 % threshold (`HediffChargeUtility.AutoRechargeThreshold`) and the same powered/reachable/compatible station requirements as any other pawn. The manual right-click **Recharge at ...** order also works on a selected ghoul, both drafted and undrafted.
+
+**This only affects job-based stations.** Passive [wireless charging](#wireless-charge-component-xml-reference) and the [low-charge alert](#compwirelesscharge) already cover eligible player ghouls through the ordinary `IsAutoRechargeEligible` route, with no ghoul-specific code involved.
+
+### How it's implemented
+
+- `CHF_GhoulSelfCharge`, a second `ThinkTreeDef` inserted at `Ghoul_PreWander`, uses the same `JobGiver_AutonomousRechargeHediffs` node used for authorized animals directly as its `thinkRoot` - it contains no ghoul-specific logic itself and needs no authorization-gating condition or tag, unlike the animal subtree. The `Ghoul_PreWander` hook is owned by Anomaly's `Ghoul` think tree alone, so this cannot affect any other subhuman mutant.
+- Anomaly separately restricts which `FloatMenuOptionProvider`s a selected mutant can use, via `MutantDef.whitelistedFloatMenuProviders` (see `Data/Anomaly/Defs/Misc/Mutants.xml`); `Ghoul`'s list does not include this framework's provider by default. `FloatMenuOptionProvider_RechargeHediff` overrides `SelectedPawnValid` to return `true` for any real ghoul (`pawn.IsGhoul`) before falling back to the base whitelist check for every other pawn type, so only this framework's manual recharge option is exempted - no other Anomaly float-menu option is affected.
+- `WorkGiver_RechargeHediffs` and ordinary work assignment are untouched - ghouls remain excluded from the work system entirely. This is self-maintenance behavior slotted before wandering, not a change to what work a ghoul can perform.
 
 ---
 
@@ -778,10 +798,10 @@ A static utility with no shared state that mutates between calls. Safe to call f
 | Method                                                          | Description                                                                                                                         |
 | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `IsPawnEligible(Pawn pawn)`                                     | Basic null / dead / hediff-set guard. Returns `false` when pawn cannot be queried.                                                  |
-| `IsAutoRechargeEligible(Pawn pawn)`                             | Returns `true` for player-controlled colonists, slaves, colony animals, and colony mechs. Returns `false` for prisoners, enemies, wild animals, and dead pawns. Used by `Alert_LowHediffCharge` and `CompWirelessCharge`. |
+| `IsAutoRechargeEligible(Pawn pawn)`                             | Returns `true` for player-controlled colonists, slaves, colony animals, colony mechs, and player-owned ghouls. Returns `false` for prisoners, enemies, wild animals, and dead pawns. Used by `Alert_LowHediffCharge` and `CompWirelessCharge`. |
 | `IsColonyAnimalCandidate(Pawn pawn)`                            | Returns `true` for an alive, non-prisoner colony animal. Basic guard used by the self-charge authorization helpers.                                                                |
 | `IsAnimalAuthorizedToSelfCharge(Pawn pawn)`                     | Returns `true` for a colony animal that has the Odyssey `SentienceCatalyst` hediff, or has learned `CHF_SelfCharge`. See [Animal Self-Charging](#animal-self-charging).             |
-| `IsEligibleForJobBasedRecharge(Pawn pawn)`                      | Job-based (`WorkGiver`/float-menu/animal AI) eligibility. Same as `IsAutoRechargeEligible` for non-animals; colony animals additionally require `IsAnimalAuthorizedToSelfCharge`. Used by `WorkGiver_RechargeHediffs`, `FloatMenuOptionProvider_RechargeHediff`, and `JobGiver_AnimalRechargeHediffs`. |
+| `IsEligibleForJobBasedRecharge(Pawn pawn)`                      | Job-based (`WorkGiver`/float-menu/autonomous AI) eligibility. Same as `IsAutoRechargeEligible` for non-animals - this already includes player-owned ghouls; colony animals additionally require `IsAnimalAuthorizedToSelfCharge`. Used by `WorkGiver_RechargeHediffs`, `FloatMenuOptionProvider_RechargeHediff`, and `JobGiver_AutonomousRechargeHediffs`. |
 | `IsChargeStation(Thing thing)`                                  | Returns `true` when the thing has a `ChargeStationExtension`. Does not check power state.                                           |
 | `IsStationPowered(Thing thing)`                                 | Returns `true` when the thing's `CompPowerTrader` reports power is on.                                                              |
 | `IsValidStation(Thing station)`                                 | Returns `true` when the station is both a registered charge station and currently powered.                                          |
@@ -867,7 +887,7 @@ The `ChargeStationExtension` can be added to **any** `ThingDef` that has a `Comp
 
 - **Overlaps stack.** Wireless chargers do not coordinate with each other. If a pawn is in range of two powered chargers, both charge it independently every scan, so charge gain roughly doubles.
 - **Scans are interval-based, not per-tick.** Each `CompWirelessCharge` only scans for pawns every `scanIntervalTicks`, and charges for the actual elapsed ticks since the previous scan - there is no per-tick cost proportional to map pawn count.
-- **Eligibility matches `IsAutoRechargeEligible`.** Wireless charging and the low-charge alert affect player-controlled colonists, slaves, colony animals, and colony mechs. They do **not** affect prisoners, neutral guests, hostile pawns, or wild animals. The job-based auto-recharge work giver additionally requires colony animals to be self-charge authorized - see [Animal Self-Charging](#animal-self-charging).
+- **Eligibility matches `IsAutoRechargeEligible`.** Wireless charging and the low-charge alert affect player-controlled colonists, slaves, colony animals, colony mechs, and player-owned ghouls. They do **not** affect prisoners, neutral guests, hostile pawns, or wild/hostile animals and ghouls. The job-based auto-recharge behavior additionally requires colony animals to be self-charge authorized (see [Animal Self-Charging](#animal-self-charging)) and reaches ghouls through a separate think-tree injection rather than the work system (see [Ghoul Recharging](#ghoul-recharging)).
 
 ### Harmony patch scope
 
@@ -876,11 +896,11 @@ The framework applies two narrow Harmony postfix patches:
 | Patch target                                  | Purpose                                                                                                                     |
 | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `PawnCapacityUtility.CalculatePartEfficiency` | Reads the pawn's `CompChargeConsequencesCache` for a cached part efficiency offset and adds it when the hediff is depleted. |
-| `Pawn.GetGizmos`                              | Dev-mode only: appends `Pawn_HealthTracker.GetGizmos()` (every `HediffComp`'s gizmos, including this framework's debug charge tools) for colony animals. Vanilla only calls it for `IsColonistPlayerControlled`, `IsColonyMech`, or `IsPrisonerOfColony` pawns, so without this patch a rechargeable hediff's debug gizmos are unreachable on an animal even with dev mode on. |
+| `Pawn.GetGizmos`                              | Dev-mode only: appends `Pawn_HealthTracker.GetGizmos()` (every `HediffComp`'s gizmos, including this framework's debug charge tools) for colony animals and player-owned ghouls. Vanilla only calls it for `IsColonistPlayerControlled`, `IsColonyMech`, or `IsPrisonerOfColony` pawns, so without this patch a rechargeable hediff's debug gizmos are unreachable on an animal or ghoul even with dev mode on. |
 
 Stat offsets and stat factors are applied through vanilla `ThingComp.GetStatOffset` and `ThingComp.GetStatFactor`, which `StatWorker.GetValueUnfinalized` already calls on every pawn comp - no Harmony patch is needed for stats.
 
-The `CalculatePartEfficiency` patch is **read-only** (modifies the return value only) and does a single dictionary lookup per queried body part with no allocations. The `Pawn.GetGizmos` patch only does any work when `DebugSettings.ShowDevGizmos` is true, and only for colony animals - it is a no-op in normal play for every other pawn type.
+The `CalculatePartEfficiency` patch is **read-only** (modifies the return value only) and does a single dictionary lookup per queried body part with no allocations. The `Pawn.GetGizmos` patch only does any work when `DebugSettings.ShowDevGizmos` is true, and only for colony animals and player-owned ghouls - it is a no-op in normal play for every other pawn type.
 
 No other vanilla methods are patched.
 

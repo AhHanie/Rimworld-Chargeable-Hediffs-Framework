@@ -65,7 +65,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="AnimalAI\JobGiver_AnimalRechargeHediffs.cs" />
+    <Compile Include="AI\JobGiver_AutonomousRechargeHediffs.cs" />
     <Compile Include="AnimalAI\ThinkNode_ConditionalAnimalSelfCharge.cs" />
     <Compile Include="Charge\ChargeConsequenceProperties.cs" />
     <Compile Include="Charge\CompChargeConsequencesCache.cs" />
@@ -93,6 +93,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
+    <Folder Include="AI\" />
     <Folder Include="AnimalAI\" />
     <Folder Include="DefModExtensions\" />
     <Folder Include="Jobs\" />

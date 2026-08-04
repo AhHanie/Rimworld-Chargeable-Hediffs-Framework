@@ -5,10 +5,11 @@ using Verse.AI;
 
 namespace Chargeable_Hediffs_Framework
 {
-    // Autonomous counterpart to WorkGiver_RechargeHediffs for authorized colony animals.
-    // Authorization is already gated by ThinkNode_ConditionalAnimalSelfCharge higher in the
-    // subtree; this node only decides whether a station is currently needed and reachable.
-    public class JobGiver_AnimalRechargeHediffs : ThinkNode_JobGiver
+    // Reusable by any think tree that has already decided the pawn is allowed to self-charge
+    // (e.g. an authorized colony animal, or a ghoul via Anomaly's Ghoul_PreWander hook). This
+    // node itself contains no pawn-type-specific logic; it only decides whether a station is
+    // currently needed and reachable.
+    public class JobGiver_AutonomousRechargeHediffs : ThinkNode_JobGiver
     {
         // Reused across calls; RimWorld's simulation is single-threaded.
         private static readonly List<Thing> s_candidateStations = new List<Thing>();

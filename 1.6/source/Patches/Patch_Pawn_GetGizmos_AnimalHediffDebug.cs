@@ -6,9 +6,11 @@ namespace Chargeable_Hediffs_Framework.Patches
 {
     // Vanilla Pawn.GetGizmos() only calls Pawn_HealthTracker.GetGizmos() - the source of every
     // HediffComp's CompGetGizmos(), including this framework's debug charge tools - for
-    // IsColonistPlayerControlled, IsColonyMech, or IsPrisonerOfColony pawns. Colony animals are
-    // never included, so a rechargeable hediff's debug gizmos are unreachable on them even with
-    // dev mode on. This restores health gizmos for colony animals in dev mode only.
+    // IsColonistPlayerControlled, IsColonyMech, or IsPrisonerOfColony pawns. Colony animals and
+    // player-owned ghouls are never included, so a rechargeable hediff's debug gizmos are
+    // unreachable on them even with dev mode on. This restores health gizmos for both in dev
+    // mode only. IsColonySubhuman is checked alongside IsGhoul because IsGhoul alone does not
+    // require player ownership (a hostile ghoul would otherwise also qualify).
     [HarmonyPatch(typeof(Pawn), nameof(Pawn.GetGizmos))]
     public static class Patch_Pawn_GetGizmos_AnimalHediffDebug
     {
@@ -19,7 +21,9 @@ namespace Chargeable_Hediffs_Framework.Patches
 
             if (!DebugSettings.ShowDevGizmos)
                 yield break;
-            if (!__instance.IsColonyAnimal || __instance.health == null)
+            bool isDebugGizmoEligible = __instance.IsColonyAnimal
+                || (__instance.IsGhoul && __instance.IsColonySubhuman);
+            if (!isDebugGizmoEligible || __instance.health == null)
                 yield break;
 
             foreach (Gizmo gizmo in __instance.health.GetGizmos())

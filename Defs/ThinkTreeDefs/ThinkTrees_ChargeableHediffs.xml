@@ -17,11 +17,27 @@
                 <li Class="ThinkNode_Tagger">
                     <tagToGive>TrainedAnimalBehavior</tagToGive>
                     <subNodes>
-                        <li Class="Chargeable_Hediffs_Framework.JobGiver_AnimalRechargeHediffs" />
+                        <li Class="Chargeable_Hediffs_Framework.JobGiver_AutonomousRechargeHediffs" />
                     </subNodes>
                 </li>
             </subNodes>
         </thinkRoot>
+    </ThinkTreeDef>
+
+    <!-- Inserted at Anomaly's Ghoul_PreWander hook (see Data/Anomaly/Defs/ThinkTreeDefs/Ghoul.xml).
+         Ghouls have AllWork disabled and never run JobGiver_Work, so WorkGiver_RechargeHediffs can
+         never autonomously assign them a recharge job. This hook sits after Ghoul's higher-priority
+         survival/combat/needs branches and immediately before wander, so it only preempts wandering
+         and never displaces those responses. No authorization gate is needed here: unlike animals,
+         all player-owned ghouls are eligible, and Ghoul_PreWander is owned by Anomaly's ghoul tree
+         alone, so this cannot affect any other subhuman mutant. -->
+    <ThinkTreeDef>
+        <defName>CHF_GhoulSelfCharge</defName>
+        <insertTag>Ghoul_PreWander</insertTag>
+        <insertPriority>100</insertPriority>
+        <!-- No ThinkNode_Tagger wrapper: tagToGive is a fixed Verse.AI.JobTag enum, not a free
+             string, so it cannot carry a framework-specific tag the way insertTag/defName can. -->
+        <thinkRoot Class="Chargeable_Hediffs_Framework.JobGiver_AutonomousRechargeHediffs" />
     </ThinkTreeDef>
 
 </Defs>

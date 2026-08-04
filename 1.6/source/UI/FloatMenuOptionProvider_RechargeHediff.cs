@@ -11,6 +11,18 @@ namespace Chargeable_Hediffs_Framework
         protected override bool Multiselect => false;
         protected override bool MechanoidCanDo => true;
 
+        // Anomaly's FloatMenuOptionProvider.SelectedPawnValid rejects a selected mutant whenever
+        // the current provider type is not on Ghoul's explicit whitelistedFloatMenuProviders (see
+        // Data/Anomaly/Defs/Misc/Mutants.xml). This provider already supports drafted/undrafted
+        // pawns, allows mechs, and has no manipulation requirement, so bypassing the whitelist for
+        // real ghouls only opens up this provider and leaves the whitelist intact for everyone else.
+        public override bool SelectedPawnValid(Pawn pawn, FloatMenuContext context)
+        {
+            if (pawn != null && pawn.IsGhoul)
+                return true;
+            return base.SelectedPawnValid(pawn, context);
+        }
+
         protected override FloatMenuOption GetSingleOptionFor(Thing clickedThing, FloatMenuContext context)
         {
             if (!HediffChargeUtility.IsChargeStation(clickedThing))
