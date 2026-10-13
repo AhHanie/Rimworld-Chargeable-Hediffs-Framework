@@ -1,7 +1,7 @@
 # Chargeable Hediffs Framework - Modder Guide
 
 **Package ID:** `sk.chargehediff`
-**RimWorld Version:** 1.6
+**RimWorld Version:** 1.6, 1.7
 **Steam Workshop:** https://steamcommunity.com/sharedfiles/filedetails/?id=3671242214
 
 ---
@@ -470,7 +470,7 @@ A heart that reduces pumping capacity when its charge is exhausted.
 </HediffDef>
 ```
 
-> `partEfficiencyOffset` is applied only to the body part this hediff is installed on (matched by `hediff.Part`). A heart efficiency penalty will reduce `BloodPumping`; a spine penalty will reduce `Moving`.
+> `partEfficiencyOffset` is applied only to the body part this hediff is installed on (matched by `hediff.Part`). On 1.7 it is added just before vanilla's final clamp in `PawnCapacityUtility.CalculatePartEfficiency`, so it is skipped on the paths where vanilla itself ignores part-level hediff stages (a missing parent part, or an ancestor with an added part). A heart efficiency penalty will reduce `BloodPumping`; a spine penalty will reduce `Moving`.
 
 ---
 

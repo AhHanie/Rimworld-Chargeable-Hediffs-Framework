@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+    <WorkGiverDef>
+        <defName>CHF_RechargeHediffs</defName>
+        <label>recharge hediffs</label>
+        <giverClass>Chargeable_Hediffs_Framework.WorkGiver_RechargeHediffs</giverClass>
+        <workType>BasicWorker</workType>
+        <priorityInType>60</priorityInType>
+        <verb>recharge</verb>
+        <gerund>recharging hediffs</gerund>
+    </WorkGiverDef>
+
+</Defs>

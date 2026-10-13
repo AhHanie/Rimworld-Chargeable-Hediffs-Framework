@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Defs>
+
+    <!-- Inserted at RimWorld's Animal_PreWander hook (see Core/Defs/ThinkTreeDefs/Animal.xml),
+         which both the core Animal and Insect think trees expose. Races with a fully custom main
+         think tree must expose the same hook, or receive their own compatibility patch, to opt
+         into self-charging AI. -->
+    <ThinkTreeDef>
+        <defName>CHF_AnimalSelfCharge</defName>
+        <insertTag>Animal_PreWander</insertTag>
+        <!-- ThinkNode_SubtreesByTag sorts trees sharing a tag by descending insertPriority.
+             100 runs ahead of ordinary idle-wander behavior while still leaving room above for
+             other mods that need to preempt self-charging at this same hook. -->
+        <insertPriority>100</insertPriority>
+        <thinkRoot Class="Chargeable_Hediffs_Framework.ThinkNode_ConditionalAnimalSelfCharge">
+            <subNodes>
+                <li Class="ThinkNode_Tagger">
+                    <tagToGive>TrainedAnimalBehavior</tagToGive>
+                    <subNodes>
+                        <li Class="Chargeable_Hediffs_Framework.JobGiver_AutonomousRechargeHediffs" />
+                    </subNodes>
+                </li>
+            </subNodes>
+        </thinkRoot>
+    </ThinkTreeDef>
+
+    <!-- Inserted at Anomaly's Ghoul_PreWander hook (see Data/Anomaly/Defs/ThinkTreeDefs/Ghoul.xml).
+         Ghouls have AllWork disabled and never run JobGiver_Work, so WorkGiver_RechargeHediffs can
+         never autonomously assign them a recharge job. This hook sits after Ghoul's higher-priority
+         survival/combat/needs branches and immediately before wander, so it only preempts wandering
+         and never displaces those responses. No authorization gate is needed here: unlike animals,
+         all player-owned ghouls are eligible, and Ghoul_PreWander is owned by Anomaly's ghoul tree
+         alone, so this cannot affect any other subhuman mutant. -->
+    <ThinkTreeDef>
+        <defName>CHF_GhoulSelfCharge</defName>
+        <insertTag>Ghoul_PreWander</insertTag>
+        <insertPriority>100</insertPriority>
+        <!-- No ThinkNode_Tagger wrapper: tagToGive is a fixed Verse.AI.JobTag enum, not a free
+             string, so it cannot carry a framework-specific tag the way insertTag/defName can. -->
+        <thinkRoot Class="Chargeable_Hediffs_Framework.JobGiver_AutonomousRechargeHediffs" />
+    </ThinkTreeDef>
+
+</Defs>

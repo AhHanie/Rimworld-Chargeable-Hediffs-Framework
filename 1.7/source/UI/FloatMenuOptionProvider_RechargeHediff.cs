@@ -1,0 +1,83 @@
+using RimWorld;
+using Verse;
+using Verse.AI;
+
+namespace Chargeable_Hediffs_Framework
+{
+    public class FloatMenuOptionProvider_RechargeHediff : FloatMenuOptionProvider
+    {
+        protected override bool Drafted => true;
+        protected override bool Undrafted => true;
+        protected override bool Multiselect => false;
+        protected override bool MechanoidCanDo => true;
+
+        // Anomaly's FloatMenuOptionProvider.SelectedPawnValid rejects a selected mutant whenever
+        // the current provider type is not on Ghoul's explicit whitelistedFloatMenuProviders (see
+        // Data/Anomaly/Defs/Misc/Mutants.xml). This provider already supports drafted/undrafted
+        // pawns, allows mechs, and has no manipulation requirement, so bypassing the whitelist for
+        // real ghouls only opens up this provider and leaves the whitelist intact for everyone else.
+        public override bool SelectedPawnValid(Pawn pawn, FloatMenuContext context)
+        {
+            if (pawn != null && pawn.IsGhoul)
+                return true;
+            return base.SelectedPawnValid(pawn, context);
+        }
+
+        protected override FloatMenuOption GetSingleOptionFor(Thing clickedThing, FloatMenuContext context)
+        {
+            if (!HediffChargeUtility.IsChargeStation(clickedThing))
+                return null;
+
+            Pawn pawn = context.FirstSelectedPawn;
+            if (pawn == null)
+                return null;
+
+            if (!HediffChargeUtility.IsEligibleForJobBasedRecharge(pawn))
+                return null;
+
+            if (!HediffChargeUtility.HasRechargeableHediffs(pawn))
+                return new FloatMenuOption(
+                    "CHF_CannotRecharge".Translate() + ": " + "CHF_NoRechargeableHediffs".Translate(),
+                    null);
+
+            ChargeStationExtension ext = HediffChargeUtility.GetStationExtension(clickedThing.def);
+            bool anySupported = false;
+            foreach (HediffComp_Rechargeable rc in HediffChargeUtility.GetRechargeableComps(pawn))
+            {
+                if (ext.SupportsDef(rc.Def))
+                {
+                    anySupported = true;
+                    break;
+                }
+            }
+            if (!anySupported)
+                return new FloatMenuOption(
+                    "CHF_CannotRecharge".Translate() + ": " + "CHF_StationNotCompatible".Translate(),
+                    null);
+
+            if (!HediffChargeUtility.IsStationPowered(clickedThing))
+                return new FloatMenuOption(
+                    "CHF_CannotRecharge".Translate() + ": " + "CHF_StationNoPower".Translate(),
+                    null);
+
+            if (!HediffChargeUtility.HasChargeableNeedingCharge(pawn, clickedThing))
+                return new FloatMenuOption(
+                    "CHF_CannotRecharge".Translate() + ": " + "CHF_AlreadyFullyCharged".Translate(),
+                    null);
+
+            if (!pawn.CanReach(clickedThing, PathEndMode.InteractionCell, pawn.NormalMaxDanger()))
+                return new FloatMenuOption(
+                    "CHF_CannotRecharge".Translate() + ": " + "NoPath".Translate().CapitalizeFirst(),
+                    null);
+
+            return FloatMenuUtility.DecoratePrioritizedTask(
+                new FloatMenuOption("CHF_RechargeAt".Translate(clickedThing.LabelCap), delegate
+                {
+                    Job job = JobMaker.MakeJob(CHF_JobDefOf.CHF_RechargeHediffs, clickedThing);
+                    pawn.jobs.TryTakeOrderedJob(job, JobTag.Misc);
+                }),
+                pawn,
+                clickedThing);
+        }
+    }
+}
