@@ -327,6 +327,131 @@ namespace Chargeable_Hediffs_Framework
             return count;
         }
 
+        // ── Worn charge pack helpers ──────────────────────────────────────────────────────────────
+        // Packs are worn CompApparelChargeBattery apparel. Stations only refill them when the
+        // station extension opts in (apparelChargeRate > 0); the hediff helpers above are unchanged.
+
+        // True if the pawn wears at least one charge pack.
+        public static bool HasWornChargePack(Pawn pawn)
+        {
+            return FindWornPack(pawn, null, requireNotFull: false) != null;
+        }
+
+        // True if any worn pack is below the given fraction of its capacity (default 20 %).
+        // Station-agnostic; use HasWornPackNeedingStationCharge for a specific station.
+        public static bool WornPackNeedsRecharge(Pawn pawn, float threshold = 0.2f)
+        {
+            if (pawn?.apparel == null)
+                return false;
+            List<Apparel> worn = pawn.apparel.WornApparel;
+            for (int i = 0; i < worn.Count; i++)
+            {
+                CompApparelChargeBattery pack = worn[i].TryGetComp<CompApparelChargeBattery>();
+                if (pack != null && pack.FillPercent < threshold)
+                    return true;
+            }
+            return false;
+        }
+
+        // True if the station refills at least one of the pawn's worn packs (ignores fill level and power).
+        public static bool HasWornPackSupportedByStation(Pawn pawn, Thing station)
+        {
+            return IsChargeStation(station)
+                && FindWornPack(pawn, GetStationExtension(station.def), requireNotFull: false) != null;
+        }
+
+        // True if the station refills at least one worn pack that is not yet full.
+        public static bool HasWornPackNeedingStationCharge(Pawn pawn, Thing station)
+        {
+            return IsChargeStation(station)
+                && FindWornPack(pawn, GetStationExtension(station.def), requireNotFull: true) != null;
+        }
+
+        // Adds this station's pack charge for delta ticks to every supported worn pack.
+        // Returns the number of packs that were not yet full and received charge.
+        public static int ChargeWornPacksFromStation(Pawn pawn, Thing station, int delta)
+        {
+            if (!IsPawnEligible(pawn) || pawn.apparel == null || !IsValidStation(station))
+                return 0;
+            ChargeStationExtension ext = GetStationExtension(station.def);
+            if (!ext.ChargesApparel)
+                return 0;
+            float uses = ext.apparelChargeRate * delta;
+            int count = 0;
+            List<Apparel> worn = pawn.apparel.WornApparel;
+            for (int i = 0; i < worn.Count; i++)
+            {
+                CompApparelChargeBattery pack = worn[i].TryGetComp<CompApparelChargeBattery>();
+                if (pack == null || pack.IsFull || !ext.SupportsApparel(pack.parent.def))
+                    continue;
+                pack.AddStationCharge(uses);
+                count++;
+            }
+            return count;
+        }
+
+        // Mean fill across the hediffs and worn packs this station can service, 0..1. Unlike
+        // AggregateChargePercent this also counts supported worn packs, so a pack-only wearer
+        // still gets a meaningful progress bar.
+        public static float AggregateStationChargePercent(Pawn pawn, Thing station)
+        {
+            if (!IsPawnEligible(pawn) || !IsChargeStation(station))
+                return 0f;
+            ChargeStationExtension ext = GetStationExtension(station.def);
+            float sum = 0f;
+            int count = 0;
+            List<Hediff> hediffs = pawn.health.hediffSet.hediffs;
+            for (int i = 0; i < hediffs.Count; i++)
+            {
+                if (!(hediffs[i] is HediffWithComps hwc))
+                    continue;
+                for (int j = 0; j < hwc.comps.Count; j++)
+                {
+                    if (hwc.comps[j] is HediffComp_Rechargeable rc && ext.SupportsDef(rc.Def))
+                    {
+                        sum += rc.ChargePercent;
+                        count++;
+                    }
+                }
+            }
+            if (ext.ChargesApparel && pawn.apparel != null)
+            {
+                List<Apparel> worn = pawn.apparel.WornApparel;
+                for (int i = 0; i < worn.Count; i++)
+                {
+                    CompApparelChargeBattery pack = worn[i].TryGetComp<CompApparelChargeBattery>();
+                    if (pack != null && ext.SupportsApparel(pack.parent.def))
+                    {
+                        sum += pack.FillPercent;
+                        count++;
+                    }
+                }
+            }
+            return count > 0 ? sum / count : 0f;
+        }
+
+        // First worn pack matching the station extension (null = any pack) and optionally not full.
+        private static CompApparelChargeBattery FindWornPack(Pawn pawn, ChargeStationExtension ext, bool requireNotFull)
+        {
+            if (pawn?.apparel == null)
+                return null;
+            if (ext != null && !ext.ChargesApparel)
+                return null;
+            List<Apparel> worn = pawn.apparel.WornApparel;
+            for (int i = 0; i < worn.Count; i++)
+            {
+                CompApparelChargeBattery pack = worn[i].TryGetComp<CompApparelChargeBattery>();
+                if (pack == null)
+                    continue;
+                if (ext != null && !ext.SupportsApparel(pack.parent.def))
+                    continue;
+                if (requireNotFull && pack.IsFull)
+                    continue;
+                return pack;
+            }
+            return null;
+        }
+
         // Mean charge percent across rechargeable hediffs eligible for the given station.
         // Pass null for station to include all rechargeable hediffs regardless of station support.
         public static float AggregateChargePercent(Pawn pawn, Thing station = null)

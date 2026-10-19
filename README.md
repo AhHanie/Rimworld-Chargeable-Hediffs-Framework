@@ -8,7 +8,7 @@ A Rimworld framework mod that gives any hediff an independent electrical charge 
 
 Everything is XML-driven. Add one `HediffComp`, tag a powered building with one `DefModExtension`, and you're done. No required base classes.
 
-See the [Modder Guide](Docs/ModderGuide.md) for the full reference, or browse the Github Wikis.
+See the Modder Guide ([1.6](1.6/Docs/ModderGuide.md), [1.7](1.7/Docs/ModderGuide.md)) for the full reference, or browse the Github Wikis.
 
 ## Supported versions
 

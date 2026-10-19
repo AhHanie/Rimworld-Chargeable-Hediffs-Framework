@@ -13,7 +13,9 @@ namespace Chargeable_Hediffs_Framework
         {
             if (!HediffChargeUtility.IsEligibleForJobBasedRecharge(pawn))
                 return true;
-            if (!forced && !HediffChargeUtility.NeedsRecharge(pawn, HediffChargeUtility.AutoRechargeThreshold))
+            if (!forced
+                && !HediffChargeUtility.NeedsRecharge(pawn, HediffChargeUtility.AutoRechargeThreshold)
+                && !HediffChargeUtility.WornPackNeedsRecharge(pawn, HediffChargeUtility.AutoRechargeThreshold))
                 return true;
             return false;
         }
@@ -35,7 +37,8 @@ namespace Chargeable_Hediffs_Framework
         {
             if (!HediffChargeUtility.IsValidStation(t))
                 return false;
-            if (!HediffChargeUtility.HasChargeableNeedingCharge(pawn, t))
+            if (!HediffChargeUtility.HasChargeableNeedingCharge(pawn, t)
+                && !HediffChargeUtility.HasWornPackNeedingStationCharge(pawn, t))
                 return false;
             if (t.IsForbidden(pawn))
                 return false;

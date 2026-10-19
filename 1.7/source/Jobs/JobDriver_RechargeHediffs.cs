@@ -21,8 +21,10 @@ namespace Chargeable_Hediffs_Framework
         {
             this.FailOnDespawnedOrNull(StationInd);
             this.FailOn(() => !HediffChargeUtility.IsValidStation(Station));
-            // Cancel if the pawn's rechargeable hediffs that this station services all disappear.
-            this.FailOn(() => !HediffChargeUtility.HasChargeableByStation(pawn, Station));
+            // Cancel if the pawn has nothing left this station services: neither rechargeable
+            // hediffs nor (when the station opts in) worn charge packs.
+            this.FailOn(() => !HediffChargeUtility.HasChargeableByStation(pawn, Station)
+                && !HediffChargeUtility.HasWornPackSupportedByStation(pawn, Station));
             // Cancel a colony animal's self-directed job if it loses its self-charge authorization
             // mid-job (training decay, catalyst removal). No-op for non-animal pawns.
             this.FailOn(() => pawn.IsColonyAnimal && !HediffChargeUtility.IsAnimalAuthorizedToSelfCharge(pawn));
@@ -42,12 +44,14 @@ namespace Chargeable_Hediffs_Framework
             charge.tickIntervalAction = delegate(int delta)
             {
                 pawn.rotationTracker.FaceTarget(Station.Position);
-                int chargedCount = HediffChargeUtility.ChargeAllFromStation(pawn, Station, delta);
+                int chargedCount = HediffChargeUtility.ChargeAllFromStation(pawn, Station, delta)
+                    + HediffChargeUtility.ChargeWornPacksFromStation(pawn, Station, delta);
                 if (chargedCount > 0)
                     biotechFx.Maintain(pawn, Station);
                 else
                     biotechFx.End();
-                if (!HediffChargeUtility.HasChargeableNeedingCharge(pawn, Station))
+                if (!HediffChargeUtility.HasChargeableNeedingCharge(pawn, Station)
+                    && !HediffChargeUtility.HasWornPackNeedingStationCharge(pawn, Station))
                     ReadyForNextToil();
             };
 
@@ -57,7 +61,7 @@ namespace Chargeable_Hediffs_Framework
             });
 
             charge.WithProgressBar(StationInd,
-                () => HediffChargeUtility.AggregateChargePercent(pawn, Station));
+                () => HediffChargeUtility.AggregateStationChargePercent(pawn, Station));
 
             yield return charge;
         }

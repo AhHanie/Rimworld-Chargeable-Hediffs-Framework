@@ -14,6 +14,15 @@ namespace Chargeable_Hediffs_Framework
         // Restrict which HediffDefs this station can service. Empty/null means all rechargeable hediffs.
         public List<HediffDef> supportedHediffs;
 
+        // Complete charge pack uses added per tick to each supported worn CompApparelChargeBattery.
+        // Zero (default) means this station never refills packs. May be fractional; the pack
+        // accumulates the remainder.
+        public float apparelChargeRate = 0f;
+
+        // Restrict which pack ThingDefs this station refills. Empty/null means any pack when
+        // apparelChargeRate is positive.
+        public List<ThingDef> supportedBatteryApparel;
+
         // Cached by ResolveReferences for use in ConfigErrors.
         private ThingDef parentDef;
 
@@ -28,6 +37,14 @@ namespace Chargeable_Hediffs_Framework
         public bool SupportsDef(HediffDef hediffDef)
         {
             return supportedHediffs == null || supportedHediffs.Count == 0 || supportedHediffs.Contains(hediffDef);
+        }
+
+        public bool ChargesApparel => apparelChargeRate > 0f;
+
+        public bool SupportsApparel(ThingDef apparelDef)
+        {
+            return ChargesApparel
+                && (supportedBatteryApparel == null || supportedBatteryApparel.Count == 0 || supportedBatteryApparel.Contains(apparelDef));
         }
 
         public override void ResolveReferences(Def def)
@@ -56,6 +73,19 @@ namespace Chargeable_Hediffs_Framework
                 {
                     if (supportedHediffs[i] == null)
                         yield return $"{nameof(ChargeStationExtension)}: '{parentDef.defName}' has a null entry in supportedHediffs at index {i} — check that all HediffDef names are spelled correctly";
+                }
+            }
+            if (float.IsNaN(apparelChargeRate) || float.IsInfinity(apparelChargeRate) || apparelChargeRate < 0f)
+                yield return $"{nameof(apparelChargeRate)} must be a finite, nonnegative number (got {apparelChargeRate})";
+            if (supportedBatteryApparel != null)
+            {
+                for (int i = 0; i < supportedBatteryApparel.Count; i++)
+                {
+                    ThingDef apparelDef = supportedBatteryApparel[i];
+                    if (apparelDef == null)
+                        yield return $"{nameof(ChargeStationExtension)}: '{parentDef.defName}' has a null entry in supportedBatteryApparel at index {i} — check that all ThingDef names are spelled correctly";
+                    else if (apparelDef.GetCompProperties<CompProperties_ApparelChargeBattery>() == null)
+                        yield return $"{nameof(ChargeStationExtension)}: '{parentDef.defName}' lists '{apparelDef.defName}' in supportedBatteryApparel, but it has no {nameof(CompProperties_ApparelChargeBattery)}";
                 }
             }
         }

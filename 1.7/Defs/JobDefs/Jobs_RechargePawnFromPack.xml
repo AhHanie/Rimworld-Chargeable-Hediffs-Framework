@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+    <!-- Wearer of a charge pack walks up to a recipient (TargetA) and recharges it. TargetB = the pack. -->
+    <JobDef>
+        <defName>CHF_RechargePawnFromPack</defName>
+        <driverClass>Chargeable_Hediffs_Framework.JobDriver_RechargePawnFromPack</driverClass>
+        <reportString>recharging TargetA.</reportString>
+        <suspendable>false</suspendable>
+    </JobDef>
+
+    <!-- Holds a mobile recipient in place while it is being recharged. TargetA = the worker, TargetB = the pack.
+         Never suspendable, so an interrupting job cannot re-queue the wait. -->
+    <JobDef>
+        <defName>CHF_WaitForPackRecharge</defName>
+        <driverClass>Chargeable_Hediffs_Framework.JobDriver_WaitForPackRecharge</driverClass>
+        <reportString>being recharged by TargetA.</reportString>
+        <suspendable>false</suspendable>
+        <carryThingAfterJob>true</carryThingAfterJob>
+        <dropThingBeforeJob>false</dropThingBeforeJob>
+    </JobDef>
+
+</Defs>

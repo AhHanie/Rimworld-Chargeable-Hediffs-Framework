@@ -13,6 +13,7 @@ namespace Chargeable_Hediffs_Framework
         // Stats from the most recent scan, for inspect text only.
         private int lastPawnsCharged;
         private int lastHediffsCharged;
+        private int lastPacksCharged;
 
         public CompProperties_WirelessCharge Props => (CompProperties_WirelessCharge)props;
 
@@ -48,6 +49,7 @@ namespace Chargeable_Hediffs_Framework
             IReadOnlyList<Pawn> pawns = map.mapPawns.AllPawnsSpawned;
             int pawnsCharged = 0;
             int hediffsCharged = 0;
+            int packsCharged = 0;
             for (int i = 0; i < pawns.Count; i++)
             {
                 Pawn pawn = pawns[i];
@@ -57,14 +59,17 @@ namespace Chargeable_Hediffs_Framework
                     continue;
 
                 int charged = HediffChargeUtility.ChargeAllFromStation(pawn, parent, elapsedTicks);
-                if (charged <= 0)
+                int packs = HediffChargeUtility.ChargeWornPacksFromStation(pawn, parent, elapsedTicks);
+                if (charged <= 0 && packs <= 0)
                     continue;
                 pawnsCharged++;
                 hediffsCharged += charged;
+                packsCharged += packs;
             }
 
             lastPawnsCharged = pawnsCharged;
             lastHediffsCharged = hediffsCharged;
+            lastPacksCharged = packsCharged;
         }
 
         public override string CompInspectStringExtra()
@@ -95,6 +100,13 @@ namespace Chargeable_Hediffs_Framework
                 sb.Append(lastHediffsCharged);
                 sb.Append(" ");
                 sb.Append("CHF_WirelessChargeHediffs".Translate());
+                if (HediffChargeUtility.GetStationExtension(parent.def)?.ChargesApparel == true)
+                {
+                    sb.Append(", ");
+                    sb.Append(lastPacksCharged);
+                    sb.Append(" ");
+                    sb.Append("CHF_WirelessChargePacks".Translate());
+                }
             }
 
             return sb.ToString();

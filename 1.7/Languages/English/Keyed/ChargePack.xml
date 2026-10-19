@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<LanguageData>
+    <!-- Charge pack command gizmo. {0} = charge per use, {1} = service time in seconds. -->
+    <CHF_PackCommandLabel>Recharge ally</CHF_PackCommandLabel>
+    <CHF_PackCommandDesc>Walk up to a colonist, slave, animal or mech with rechargeable implants and recharge them from this pack. The target stops while the pack works.\n\nDelivers up to {0} charge per use over {1} seconds. A use is spent only when the recharge completes.</CHF_PackCommandDesc>
+
+    <!-- Reasons the command is disabled. -->
+    <CHF_PackWearerNotOnMap>not on a map</CHF_PackWearerNotOnMap>
+    <CHF_PackWearerCannotMove>{0} cannot move</CHF_PackWearerCannotMove>
+    <CHF_PackUnusable>cannot be used right now</CHF_PackUnusable>
+
+    <!-- Reasons a target is rejected. Key = CHF_PackInvalid_ + PackRechargeDenial. -->
+    <CHF_PackInvalid_NotWorn>the pack is not being worn</CHF_PackInvalid_NotWorn>
+    <CHF_PackInvalid_Self>cannot recharge yourself</CHF_PackInvalid_Self>
+    <CHF_PackInvalid_NotSpawned>invalid target</CHF_PackInvalid_NotSpawned>
+    <CHF_PackInvalid_WrongMap>target is on a different map</CHF_PackInvalid_WrongMap>
+    <CHF_PackInvalid_NotColonyOwned>not a colony pawn, slave, animal or mech</CHF_PackInvalid_NotColonyOwned>
+    <CHF_PackInvalid_Hostile>target is hostile</CHF_PackInvalid_Hostile>
+    <CHF_PackInvalid_NoDeficit>nothing to recharge</CHF_PackInvalid_NoDeficit>
+    <CHF_PackInvalid_MentalState>target is in a mental state</CHF_PackInvalid_MentalState>
+    <CHF_PackInvalid_NotInterruptible>target cannot be interrupted right now</CHF_PackInvalid_NotInterruptible>
+    <CHF_PackInvalid_AlreadyServiced>target is already being recharged</CHF_PackInvalid_AlreadyServiced>
+    <CHF_PackInvalid_Reserved>target is busy with someone else</CHF_PackInvalid_Reserved>
+    <CHF_PackInvalid_Unreachable>no path to target</CHF_PackInvalid_Unreachable>
+
+    <!-- Item stats. {CHARGENOUN} = the pack's chargeNoun. -->
+    <CHF_Stat_PackChargePerUse_Name>Charge delivered per use</CHF_Stat_PackChargePerUse_Name>
+    <CHF_Stat_PackChargePerUse_Desc>The most implant charge one completed recharge adds to the target, summed across all of its implants. Each completed recharge spends one {CHARGENOUN}.</CHF_Stat_PackChargePerUse_Desc>
+    <CHF_Stat_PackDuration_Name>Recharge duration</CHF_Stat_PackDuration_Name>
+    <CHF_Stat_PackDuration_Desc>How long the wearer must stand next to the target for one recharge to complete.</CHF_Stat_PackDuration_Desc>
+
+    <!-- Charge station UI for opted-in pack refilling. -->
+    <CHF_RechargePackAt>Recharge charge pack at {0}</CHF_RechargePackAt>
+    <CHF_WirelessChargePacks>packs</CHF_WirelessChargePacks>
+</LanguageData>

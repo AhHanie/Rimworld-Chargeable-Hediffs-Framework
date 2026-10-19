@@ -7,6 +7,8 @@ namespace Chargeable_Hediffs_Framework
     public static class CHF_JobDefOf
     {
         public static JobDef CHF_RechargeHediffs;
+        public static JobDef CHF_RechargePawnFromPack;
+        public static JobDef CHF_WaitForPackRecharge;
 
         static CHF_JobDefOf()
         {

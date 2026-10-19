@@ -35,7 +35,8 @@ namespace Chargeable_Hediffs_Framework
             if (!HediffChargeUtility.IsEligibleForJobBasedRecharge(pawn))
                 return null;
 
-            if (!HediffChargeUtility.HasRechargeableHediffs(pawn))
+            bool hasHediffs = HediffChargeUtility.HasRechargeableHediffs(pawn);
+            if (!hasHediffs && !HediffChargeUtility.HasWornChargePack(pawn))
                 return new FloatMenuOption(
                     "CHF_CannotRecharge".Translate() + ": " + "CHF_NoRechargeableHediffs".Translate(),
                     null);
@@ -50,7 +51,8 @@ namespace Chargeable_Hediffs_Framework
                     break;
                 }
             }
-            if (!anySupported)
+            bool packSupported = HediffChargeUtility.HasWornPackSupportedByStation(pawn, clickedThing);
+            if (!anySupported && !packSupported)
                 return new FloatMenuOption(
                     "CHF_CannotRecharge".Translate() + ": " + "CHF_StationNotCompatible".Translate(),
                     null);
@@ -60,7 +62,8 @@ namespace Chargeable_Hediffs_Framework
                     "CHF_CannotRecharge".Translate() + ": " + "CHF_StationNoPower".Translate(),
                     null);
 
-            if (!HediffChargeUtility.HasChargeableNeedingCharge(pawn, clickedThing))
+            if (!HediffChargeUtility.HasChargeableNeedingCharge(pawn, clickedThing)
+                && !HediffChargeUtility.HasWornPackNeedingStationCharge(pawn, clickedThing))
                 return new FloatMenuOption(
                     "CHF_CannotRecharge".Translate() + ": " + "CHF_AlreadyFullyCharged".Translate(),
                     null);
@@ -71,7 +74,7 @@ namespace Chargeable_Hediffs_Framework
                     null);
 
             return FloatMenuUtility.DecoratePrioritizedTask(
-                new FloatMenuOption("CHF_RechargeAt".Translate(clickedThing.LabelCap), delegate
+                new FloatMenuOption((anySupported ? "CHF_RechargeAt" : "CHF_RechargePackAt").Translate(clickedThing.LabelCap), delegate
                 {
                     Job job = JobMaker.MakeJob(CHF_JobDefOf.CHF_RechargeHediffs, clickedThing);
                     pawn.jobs.TryTakeOrderedJob(job, JobTag.Misc);

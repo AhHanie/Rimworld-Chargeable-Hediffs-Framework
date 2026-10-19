@@ -18,7 +18,8 @@ namespace Chargeable_Hediffs_Framework
         {
             if (!pawn.Spawned)
                 return null;
-            if (!HediffChargeUtility.NeedsRecharge(pawn, HediffChargeUtility.AutoRechargeThreshold))
+            if (!HediffChargeUtility.NeedsRecharge(pawn, HediffChargeUtility.AutoRechargeThreshold)
+                && !HediffChargeUtility.WornPackNeedsRecharge(pawn, HediffChargeUtility.AutoRechargeThreshold))
                 return null;
 
             Thing station = FindReachableStation(pawn);
@@ -66,7 +67,8 @@ namespace Chargeable_Hediffs_Framework
         {
             if (!HediffChargeUtility.IsValidStation(station))
                 return false;
-            if (!HediffChargeUtility.HasChargeableNeedingCharge(pawn, station))
+            if (!HediffChargeUtility.HasChargeableNeedingCharge(pawn, station)
+                && !HediffChargeUtility.HasWornPackNeedingStationCharge(pawn, station))
                 return false;
             if (station.IsForbidden(pawn))
                 return false;
