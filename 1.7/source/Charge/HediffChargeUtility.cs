@@ -160,7 +160,7 @@ namespace Chargeable_Hediffs_Framework
         // Does not check powered state or whether the comp currently needs charge.
         public static bool CanStationCharge(Thing station, HediffComp_Rechargeable comp)
         {
-            if (comp == null || !IsChargeStation(station))
+            if (comp == null || !IsChargeStation(station) || !comp.IsChargeActive)
                 return false;
             return GetStationExtension(station.def).SupportsDef(comp.Def);
         }
@@ -176,7 +176,7 @@ namespace Chargeable_Hediffs_Framework
 
         // ── Core query helpers ────────────────────────────────────────────────────────────────────
 
-        // Fills outComps with every HediffComp_Rechargeable on the pawn; clears the list first.
+        // Fills outComps with every active HediffComp_Rechargeable on the pawn; clears the list first.
         // Returns the count filled. Zero allocation when the caller supplies a reusable list.
         public static int GetRechargeableComps(Pawn pawn, List<HediffComp_Rechargeable> outComps)
         {
@@ -199,7 +199,7 @@ namespace Chargeable_Hediffs_Framework
                     continue;
                 for (int j = 0; j < hwc.comps.Count; j++)
                 {
-                    if (hwc.comps[j] is HediffComp_Rechargeable rc)
+                    if (hwc.comps[j] is HediffComp_Rechargeable rc && rc.IsChargeActive)
                         yield return rc;
                 }
             }
@@ -216,7 +216,7 @@ namespace Chargeable_Hediffs_Framework
                     continue;
                 for (int j = 0; j < hwc.comps.Count; j++)
                 {
-                    if (hwc.comps[j] is HediffComp_Rechargeable)
+                    if (hwc.comps[j] is HediffComp_Rechargeable rc && rc.IsChargeActive)
                         return true;
                 }
             }
@@ -237,7 +237,7 @@ namespace Chargeable_Hediffs_Framework
                     continue;
                 for (int j = 0; j < hwc.comps.Count; j++)
                 {
-                    if (!(hwc.comps[j] is HediffComp_Rechargeable rc))
+                    if (!(hwc.comps[j] is HediffComp_Rechargeable rc) || !rc.IsChargeActive)
                         continue;
                     float p = rc.ChargePercent;
                     if (!found || p < percent)
@@ -259,7 +259,7 @@ namespace Chargeable_Hediffs_Framework
                 {
                     for (int j = 0; j < hwc.comps.Count; j++)
                     {
-                        if (hwc.comps[j] is HediffComp_Rechargeable rc)
+                        if (hwc.comps[j] is HediffComp_Rechargeable rc && rc.IsChargeActive)
                             outComps.Add(rc);
                     }
                 }
@@ -321,8 +321,10 @@ namespace Chargeable_Hediffs_Framework
                 HediffComp_Rechargeable rc = s_tempComps[i];
                 if (!ext.SupportsDef(rc.Def) || !rc.NeedsCharge)
                     continue;
+                float before = rc.CurrentCharge;
                 rc.AddCharge(rate);
-                count++;
+                if (rc.CurrentCharge > before)
+                    count++;
             }
             return count;
         }
@@ -407,7 +409,7 @@ namespace Chargeable_Hediffs_Framework
                     continue;
                 for (int j = 0; j < hwc.comps.Count; j++)
                 {
-                    if (hwc.comps[j] is HediffComp_Rechargeable rc && ext.SupportsDef(rc.Def))
+                    if (hwc.comps[j] is HediffComp_Rechargeable rc && ext.SupportsDef(rc.Def) && rc.IsChargeActive)
                     {
                         sum += rc.ChargePercent;
                         count++;

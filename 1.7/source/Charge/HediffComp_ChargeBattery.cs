@@ -6,8 +6,8 @@ using Verse;
 namespace Chargeable_Hediffs_Framework
 {
     // Drains a HediffComp_Rechargeable on the same hediff and transfers the charge into other
-    // rechargeable hediffs on the pawn. Runs unconditionally on tick: no spawned/awake/faction/
-    // caravan eligibility checks, since this is an internal hediff-to-hediff transfer.
+    // rechargeable hediffs on the pawn. Transfers require active implants and work wherever
+    // the hediff ticks.
     public class HediffComp_ChargeBattery : HediffComp
     {
         private HediffComp_Rechargeable source;
@@ -24,12 +24,13 @@ namespace Chargeable_Hediffs_Framework
         // CompExposeData runs, so CompPostMake never fires for them.
         private HediffComp_Rechargeable Source => source ?? (source = parent.GetComp<HediffComp_Rechargeable>());
 
-        public override string CompTipStringExtra => Props.showInspectString ? GetBatteryInspectString() : null;
+        public override string CompTipStringExtra => Props.showInspectString && Source?.IsChargeActive == true
+            ? GetBatteryInspectString() : null;
 
         public override void CompPostTickInterval(ref float severityAdjustment, int delta)
         {
             HediffComp_Rechargeable src = Source;
-            if (src == null)
+            if (src?.IsChargeActive != true)
                 return;
             Pawn pawn = Pawn;
             float budget = Mathf.Min(src.CurrentCharge, Props.chargeRate * delta);
@@ -42,7 +43,7 @@ namespace Chargeable_Hediffs_Framework
             lastSourceDrained = 0f;
             lastTargetChargeAdded = 0f;
 
-            while (budget > 0f)
+            while (budget > 0f && src.IsChargeActive)
             {
                 HediffComp_Rechargeable target = FindBestTarget(hediffs, src);
                 if (target == null)
@@ -54,8 +55,12 @@ namespace Chargeable_Hediffs_Framework
                 if (drain <= 0f)
                     break;
 
-                float gain = drain * Props.transferEfficiency;
-                target.AddCharge(gain);
+                float before = target.CurrentCharge;
+                target.AddCharge(drain * Props.transferEfficiency);
+                float gain = target.CurrentCharge - before;
+                if (gain <= 0f)
+                    break;
+
                 src.DrainCharge(drain);
                 budget -= drain;
 
@@ -142,6 +147,9 @@ namespace Chargeable_Hediffs_Framework
             HediffComp_Rechargeable src = Source;
             if (src == null)
                 return $"{nameof(HediffComp_ChargeBattery)}: no {nameof(HediffComp_Rechargeable)} found on parent hediff";
+
+            if (!src.IsChargeActive)
+                return null;
 
             var sb = new StringBuilder();
             sb.Append($"source charge: {src.CurrentCharge:F3} / {src.MaxCharge:F3}");

@@ -30,7 +30,7 @@ namespace Chargeable_Hediffs_Framework
                     if (statFactors[i].stat == null)
                         yield return $"depletedConsequences.statFactors[{i}].stat is null";
                     if (statFactors[i].value == 0f)
-                        yield return $"depletedConsequences.statFactors[{i}].value is 0; zero stat factors cannot be removed from the consequence cache — use a small nonzero value instead";
+                        yield return $"depletedConsequences.statFactors[{i}].value is 0; use a small nonzero value instead";
                 }
         }
     }

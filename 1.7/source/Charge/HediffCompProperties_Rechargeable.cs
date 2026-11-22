@@ -14,6 +14,7 @@ namespace Chargeable_Hediffs_Framework
         // Charge lost per game tick while the pawn is alive and active.
         public float chargeDecayPerTick = 0f;
 
+        public RechargeableActivationWorker activationWorker;
         public ChargeConsequenceProperties depletedConsequences;
 
         public HediffCompProperties_Rechargeable()

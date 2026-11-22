@@ -8,28 +8,93 @@ namespace Chargeable_Hediffs_Framework
 {
     public class CompChargeConsequencesCache : ThingComp
     {
-        private struct CachedEntry
+        private sealed class CachedEntry
         {
-            public BodyPartRecord part;
-            public List<StatModifier> statOffsets;
-            public List<StatModifier> statFactors;
-            public float partEfficiencyOffset;
+            public readonly HediffComp_Rechargeable Comp;
+            public readonly BodyPartRecord part;
+            public readonly List<StatModifier> statOffsets;
+            public readonly List<StatModifier> statFactors;
+            public readonly float partEfficiencyOffset;
+            public bool Active;
+
+            public CachedEntry(HediffComp_Rechargeable comp, ChargeConsequenceProperties effects)
+            {
+                Comp = comp;
+                part = comp.parent.Part;
+                statOffsets = effects.statOffsets;
+                statFactors = effects.statFactors;
+                partEfficiencyOffset = part != null ? effects.partEfficiencyOffset : 0f;
+                Active = comp.IsChargeActive;
+            }
+
+            public bool CanAffectStat(StatDef stat)
+            {
+                return partEfficiencyOffset != 0f
+                    || ContainsStat(statOffsets, stat)
+                    || ContainsStat(statFactors, stat);
+            }
+
+            private static bool ContainsStat(List<StatModifier> modifiers, StatDef stat)
+            {
+                foreach (StatModifier modifier in modifiers)
+                    if (modifier.stat == stat)
+                        return true;
+                return false;
+            }
         }
 
-        private readonly Dictionary<Hediff, CachedEntry> activeByHediff =
-            new Dictionary<Hediff, CachedEntry>();
+        private struct CacheInvalidation
+        {
+            private bool capacitiesChanged;
+            private HashSet<StatDef> affectedStats;
 
-        private readonly Dictionary<StatDef, float> cachedStatOffsets =
-            new Dictionary<StatDef, float>();
+            public void Include(CachedEntry entry)
+            {
+                if (entry.partEfficiencyOffset != 0f)
+                    capacitiesChanged = true;
 
-        private readonly Dictionary<StatDef, float> cachedStatFactors =
-            new Dictionary<StatDef, float>();
+                IncludeStats(entry.statOffsets);
+                IncludeStats(entry.statFactors);
+            }
 
-        private readonly Dictionary<BodyPartRecord, float> partEfficiencyOffsets =
-            new Dictionary<BodyPartRecord, float>();
+            private void IncludeStats(List<StatModifier> modifiers)
+            {
+                foreach (StatModifier modifier in modifiers)
+                {
+                    if (modifier.stat != null)
+                        (affectedStats ??= new HashSet<StatDef>()).Add(modifier.stat);
+                }
+            }
 
-        private readonly Dictionary<BodyPartRecord, List<Hediff>> partEfficiencySources =
-            new Dictionary<BodyPartRecord, List<Hediff>>();
+            public void Apply(Pawn pawn)
+            {
+                if (capacitiesChanged)
+                {
+                    pawn.health.capacities?.Notify_CapacityLevelsDirty();
+                    // Any cached stat on this pawn could use the changed capacity.
+                    foreach (StatDef stat in DefDatabase<StatDef>.AllDefsListForReading)
+                    {
+                        if ((stat.cacheable || stat.immutable) && affectedStats?.Contains(stat) != true)
+                            stat.Worker.ClearCacheForThing(pawn);
+                    }
+                }
+
+                if (affectedStats != null)
+                {
+                    foreach (StatDef stat in affectedStats)
+                        stat.Worker.ClearCacheForThing(pawn);
+                }
+            }
+        }
+
+        private Dictionary<HediffComp_Rechargeable, CachedEntry> depleted = new();
+        private readonly List<CachedEntry> conditional = new();
+        private HashSet<HediffComp_Rechargeable> pendingHealthNotifications;
+
+        private readonly Dictionary<StatDef, float> cachedStatOffsets = new();
+        private readonly Dictionary<StatDef, float> cachedStatFactors = new();
+        private readonly Dictionary<BodyPartRecord, float> partEfficiencyOffsets = new();
+        private readonly Dictionary<BodyPartRecord, List<Hediff>> partEfficiencySources = new();
 
         private bool dirty;
 
@@ -37,8 +102,7 @@ namespace Chargeable_Hediffs_Framework
 
         public override void PostSpawnSetup(bool respawningAfterLoad)
         {
-            if (dirty)
-                RebuildFromPawnHediffs();
+            RefreshActivation();
         }
 
         public override void PostExposeData()
@@ -49,168 +113,172 @@ namespace Chargeable_Hediffs_Framework
 
         public override float GetStatOffset(StatDef stat)
         {
-            if (dirty)
-                RebuildFromPawnHediffs();
+            RefreshActivation(stat);
             return cachedStatOffsets.TryGetValue(stat, out float value) ? value : 0f;
         }
 
         public override float GetStatFactor(StatDef stat)
         {
-            if (dirty)
-                RebuildFromPawnHediffs();
+            RefreshActivation(stat);
             return cachedStatFactors.TryGetValue(stat, out float value) ? value : 1f;
         }
 
         public override void GetStatsExplanation(StatDef stat, StringBuilder sb, string whitespace = "")
         {
-            if (dirty)
-                RebuildFromPawnHediffs();
+            RefreshActivation(stat);
 
             StringBuilder lines = null;
-            foreach (KeyValuePair<Hediff, CachedEntry> pair in activeByHediff)
+            foreach (CachedEntry entry in depleted.Values)
             {
-                AppendStatExplanationLines(stat, pair.Key, pair.Value, ref lines, whitespace);
+                if (entry.Active)
+                    AppendStatExplanationLines(stat, entry.Comp.parent, entry, ref lines, whitespace);
             }
 
             if (lines == null || lines.Length == 0)
                 return;
 
             sb.AppendLine(whitespace + "CHF_StatsReport_DepletedCharge".Translate() + ":");
-            sb.Append(lines.ToString());
+            sb.Append(lines);
         }
 
         public void RegisterDepleted(HediffComp_Rechargeable comp)
         {
-            if (comp?.parent == null || Pawn == null)
+            if (!HediffChargeUtility.IsPawnEligible(Pawn))
                 return;
-            if (!comp.IsDepleted)
-                return;
-            ChargeConsequenceProperties cons = comp.Props.depletedConsequences;
-            if (cons == null)
-                return;
+            if (dirty)
+                RebuildFromPawnHediffs();
 
-            bool hasOffsets = cons.statOffsets.Count > 0;
-            bool hasFactors = cons.statFactors.Count > 0;
-            bool hasPartEff = cons.partEfficiencyOffset != 0f;
-            if (!hasOffsets && !hasFactors && !hasPartEff)
+            CachedEntry entry = TrackDepleted(comp);
+            if (entry?.Active != true)
                 return;
 
-            Hediff hediff = comp.parent;
-
-            // Remove stale entry first to prevent duplicate aggregation
-            if (activeByHediff.ContainsKey(hediff))
-                Unregister(comp);
-
-            activeByHediff[hediff] = new CachedEntry
-            {
-                part = hediff.Part,
-                statOffsets = cons.statOffsets,
-                statFactors = cons.statFactors,
-                partEfficiencyOffset = cons.partEfficiencyOffset
-            };
-
-            for (int i = 0; i < cons.statOffsets.Count; i++)
-            {
-                StatModifier sm = cons.statOffsets[i];
-                if (sm.stat == null) continue;
-                cachedStatOffsets[sm.stat] = cachedStatOffsets.TryGetValue(sm.stat, out float cur)
-                    ? cur + sm.value : sm.value;
-            }
-
-            for (int i = 0; i < cons.statFactors.Count; i++)
-            {
-                StatModifier sm = cons.statFactors[i];
-                if (sm.stat == null) continue;
-                cachedStatFactors[sm.stat] = cachedStatFactors.TryGetValue(sm.stat, out float cur)
-                    ? cur * sm.value : sm.value;
-            }
-
-            BodyPartRecord part = hediff.Part;
-            if (part != null && cons.partEfficiencyOffset != 0f)
-            {
-                partEfficiencyOffsets[part] = partEfficiencyOffsets.TryGetValue(part, out float cur)
-                    ? cur + cons.partEfficiencyOffset : cons.partEfficiencyOffset;
-
-                if (!partEfficiencySources.TryGetValue(part, out List<Hediff> sources))
-                {
-                    sources = new List<Hediff>();
-                    partEfficiencySources[part] = sources;
-                }
-                sources.Add(hediff);
-
-                NotifyCapacityDirty();
-            }
+            AddActiveEffects(entry);
+            var invalidation = new CacheInvalidation();
+            invalidation.Include(entry);
+            invalidation.Apply(Pawn);
         }
 
         public void Unregister(HediffComp_Rechargeable comp)
         {
-            if (comp?.parent == null)
+            if (comp == null)
                 return;
 
-            Hediff hediff = comp.parent;
-            if (!activeByHediff.TryGetValue(hediff, out CachedEntry cached))
+            pendingHealthNotifications?.Remove(comp);
+            if (!depleted.Remove(comp, out CachedEntry entry))
                 return;
 
-            activeByHediff.Remove(hediff);
+            if (comp.Props.activationWorker != null)
+                conditional.Remove(entry);
+            if (!entry.Active)
+                return;
 
-            for (int i = 0; i < cached.statOffsets.Count; i++)
+            RebuildAggregates();
+            var invalidation = new CacheInvalidation();
+            invalidation.Include(entry);
+            invalidation.Apply(Pawn);
+        }
+
+        private CachedEntry TrackDepleted(HediffComp_Rechargeable comp)
+        {
+            if (comp?.parent == null || !comp.IsDepleted || depleted.ContainsKey(comp))
+                return null;
+
+            ChargeConsequenceProperties effects = comp.Props.depletedConsequences;
+            if (effects == null || (effects.statOffsets.Count == 0 && effects.statFactors.Count == 0
+                && (comp.parent.Part == null || effects.partEfficiencyOffset == 0f)))
+                return null;
+
+            var entry = new CachedEntry(comp, effects);
+            depleted.Add(comp, entry);
+            if (comp.Props.activationWorker != null)
+                conditional.Add(entry);
+
+            return entry;
+        }
+
+        internal void RefreshActivation(StatDef stat = null)
+        {
+            if (dirty)
             {
-                StatModifier sm = cached.statOffsets[i];
-                if (sm.stat == null) continue;
-                if (!cachedStatOffsets.TryGetValue(sm.stat, out float cur)) continue;
-                float newVal = cur - sm.value;
-                if (Mathf.Abs(newVal) < 1e-5f)
-                    cachedStatOffsets.Remove(sm.stat);
-                else
-                    cachedStatOffsets[sm.stat] = newVal;
-            }
-
-            for (int i = 0; i < cached.statFactors.Count; i++)
-            {
-                StatModifier sm = cached.statFactors[i];
-                if (sm.stat == null) continue;
-                if (!cachedStatFactors.TryGetValue(sm.stat, out float cur)) continue;
-
-                if (Mathf.Abs(sm.value) < 1e-5f)
-                {
-                    // Zero factor cannot be divided out safely; full rebuild instead
+                if (HediffChargeUtility.IsPawnEligible(Pawn))
                     RebuildFromPawnHediffs();
-                    return;
-                }
-                float newVal = cur / sm.value;
-                if (Mathf.Abs(newVal - 1f) < 1e-5f)
-                    cachedStatFactors.Remove(sm.stat);
-                else
-                    cachedStatFactors[sm.stat] = newVal;
+                return;
             }
 
-            BodyPartRecord part = cached.part;
-            if (part != null && cached.partEfficiencyOffset != 0f)
+            if (conditional.Count == 0 || (stat != null && !CanAffectStat(stat)))
+                return;
+
+            bool changed = false;
+            var invalidation = new CacheInvalidation();
+            foreach (CachedEntry entry in conditional)
             {
-                if (partEfficiencyOffsets.TryGetValue(part, out float cur))
-                {
-                    float newVal = cur - cached.partEfficiencyOffset;
-                    if (Mathf.Abs(newVal) < 1e-5f)
-                        partEfficiencyOffsets.Remove(part);
-                    else
-                        partEfficiencyOffsets[part] = newVal;
-                }
+                bool active = entry.Comp.IsChargeActive;
+                if (entry.Active == active)
+                    continue;
 
-                if (partEfficiencySources.TryGetValue(part, out List<Hediff> sources))
-                {
-                    sources.Remove(hediff);
-                    if (sources.Count == 0)
-                        partEfficiencySources.Remove(part);
-                }
-
-                NotifyCapacityDirty();
+                entry.Active = active;
+                QueueHealthNotification(entry.Comp);
+                invalidation.Include(entry);
+                changed = true;
             }
+
+            if (changed)
+            {
+                RebuildAggregates();
+                invalidation.Apply(Pawn);
+            }
+        }
+
+        private bool CanAffectStat(StatDef stat)
+        {
+            foreach (CachedEntry entry in conditional)
+                if (entry.CanAffectStat(stat))
+                    return true;
+            return false;
+        }
+
+        private void QueueHealthNotification(HediffComp_Rechargeable comp)
+        {
+            (pendingHealthNotifications ??= new HashSet<HediffComp_Rechargeable>()).Add(comp);
+        }
+
+        internal void CheckActivationOnTick(HediffComp_Rechargeable comp)
+        {
+            if (dirty)
+                RebuildFromPawnHediffs();
+
+            // The usual interval only needs to evaluate this implant. A transition refreshes
+            // every affected contribution before any health notification runs.
+            if (depleted.TryGetValue(comp, out CachedEntry entry) && entry.Active != comp.IsChargeActive)
+                RefreshActivation();
+
+            if (pendingHealthNotifications?.Remove(comp) == true && !Pawn.Dead)
+                Pawn.health.Notify_HediffChanged(comp.parent);
+        }
+
+        internal void ClearOnDeath()
+        {
+            if (depleted.Count > 0)
+            {
+                var invalidation = new CacheInvalidation();
+                foreach (CachedEntry entry in depleted.Values)
+                    if (entry.Active)
+                        invalidation.Include(entry);
+
+                depleted.Clear();
+                conditional.Clear();
+                pendingHealthNotifications?.Clear();
+                RebuildAggregates();
+                invalidation.Apply(Pawn);
+            }
+
+            // Reconstruct the transient entries if this pawn is resurrected.
+            dirty = true;
         }
 
         public bool TryGetPartEfficiencyOffset(BodyPartRecord part, out float offset)
         {
-            if (dirty)
-                RebuildFromPawnHediffs();
+            RefreshActivation();
             if (!partEfficiencyOffsets.TryGetValue(part, out offset))
                 return false;
             if (Mathf.Abs(offset) < 1e-5f)
@@ -225,26 +293,19 @@ namespace Chargeable_Hediffs_Framework
         {
             if (impactors == null)
                 return false;
+
+            RefreshActivation();
             if (!partEfficiencySources.TryGetValue(part, out List<Hediff> sources))
                 return false;
 
-            Pawn pawn = Pawn;
-            bool added = false;
-            for (int i = 0; i < sources.Count; i++)
-            {
-                Hediff source = sources[i];
-                if (pawn != null && !pawn.health.hediffSet.hediffs.Contains(source))
-                    continue;
+            foreach (Hediff source in sources)
                 impactors.Add(new PawnCapacityUtility.CapacityImpactorHediff { hediff = source });
-                added = true;
-            }
-            return added;
+            return true;
         }
 
         public bool HasPartEfficiencyOffset(BodyPartRecord part)
         {
-            if (dirty)
-                RebuildFromPawnHediffs();
+            RefreshActivation();
             return partEfficiencyOffsets.ContainsKey(part);
         }
 
@@ -252,31 +313,84 @@ namespace Chargeable_Hediffs_Framework
 
         public void RebuildFromPawnHediffs()
         {
-            activeByHediff.Clear();
-            cachedStatOffsets.Clear();
-            cachedStatFactors.Clear();
-            partEfficiencyOffsets.Clear();
-            foreach (List<Hediff> list in partEfficiencySources.Values)
-                list.Clear();
-            partEfficiencySources.Clear();
-            // Mark clean before the loop so re-entrant stat queries do not recurse
-            dirty = false;
-
             Pawn pawn = Pawn;
             if (!HediffChargeUtility.IsPawnEligible(pawn))
                 return;
 
-            List<Hediff> hediffs = pawn.health.hediffSet.hediffs;
-            for (int i = 0; i < hediffs.Count; i++)
+            var previous = depleted;
+            depleted = new Dictionary<HediffComp_Rechargeable, CachedEntry>();
+            conditional.Clear();
+            dirty = false;
+
+            var invalidation = new CacheInvalidation();
+            foreach (CachedEntry entry in previous.Values)
+                if (entry.Active)
+                    invalidation.Include(entry);
+
+            foreach (Hediff hediff in pawn.health.hediffSet.hediffs)
             {
-                if (!(hediffs[i] is HediffWithComps hwc))
+                if (!(hediff is HediffWithComps { comps: not null } withComps))
                     continue;
-                for (int j = 0; j < hwc.comps.Count; j++)
+
+                foreach (HediffComp hediffComp in withComps.comps)
                 {
-                    if (hwc.comps[j] is HediffComp_Rechargeable rc && rc.IsDepleted)
-                        RegisterDepleted(rc);
+                    if (!(hediffComp is HediffComp_Rechargeable comp))
+                        continue;
+
+                    CachedEntry entry = TrackDepleted(comp);
+                    if (entry == null)
+                        continue;
+
+                    if (entry.Active)
+                        invalidation.Include(entry);
+                    if (previous.TryGetValue(comp, out CachedEntry oldEntry) && oldEntry.Active != entry.Active)
+                        QueueHealthNotification(comp);
                 }
             }
+
+            pendingHealthNotifications?.RemoveWhere(comp => !depleted.ContainsKey(comp));
+            RebuildAggregates();
+            invalidation.Apply(pawn);
+        }
+
+        private void RebuildAggregates()
+        {
+            cachedStatOffsets.Clear();
+            cachedStatFactors.Clear();
+            partEfficiencyOffsets.Clear();
+            partEfficiencySources.Clear();
+
+            foreach (CachedEntry entry in depleted.Values)
+                if (entry.Active)
+                    AddActiveEffects(entry);
+        }
+
+        private void AddActiveEffects(CachedEntry entry)
+        {
+            foreach (StatModifier modifier in entry.statOffsets)
+            {
+                if (modifier.stat != null)
+                    cachedStatOffsets[modifier.stat] = cachedStatOffsets.GetValueOrDefault(modifier.stat) + modifier.value;
+            }
+
+            foreach (StatModifier modifier in entry.statFactors)
+            {
+                if (modifier.stat != null)
+                    cachedStatFactors[modifier.stat] = cachedStatFactors.GetValueOrDefault(modifier.stat, 1f) * modifier.value;
+            }
+
+            if (entry.partEfficiencyOffset == 0f)
+                return;
+
+            BodyPartRecord part = entry.part;
+            partEfficiencyOffsets[part] = partEfficiencyOffsets.GetValueOrDefault(part) + entry.partEfficiencyOffset;
+            if (!partEfficiencySources.TryGetValue(part, out List<Hediff> sources))
+            {
+                sources = new List<Hediff>();
+                partEfficiencySources[part] = sources;
+            }
+            if (!sources.Contains(entry.Comp.parent))
+                sources.Add(entry.Comp.parent);
         }
 
         private static void AppendStatExplanationLines(
@@ -325,11 +439,6 @@ namespace Chargeable_Hediffs_Framework
             if (part != null)
                 return label + " (" + part.LabelCap + ")";
             return label;
-        }
-
-        private void NotifyCapacityDirty()
-        {
-            Pawn?.health?.capacities?.Notify_CapacityLevelsDirty();
         }
     }
 }

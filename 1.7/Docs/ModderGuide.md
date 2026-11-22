@@ -166,9 +166,10 @@ Put this on a nonstacking apparel `ThingDef`. No `verbs` entry is needed. The fr
 | `maxCharge`            | `float` | `1`     | Maximum stored charge. Must be positive. Choose any scale; see [Understanding units](#understanding-units).                                                 |
 | `startingCharge`       | `float` | `-1`    | Charge when the hediff is first created. **Negative means start at `maxCharge`** (full). Set to `0` to start depleted.                                      |
 | `chargeDecayPerTick`   | `float` | `0`     | Charge lost per game tick while the pawn is alive and active. `0` means no decay (charge is permanent until drained externally).                            |
-| `depletedConsequences` | element | `null`  | Optional `ChargeConsequenceProperties` block. Penalties are cached in the pawn's `CompChargeConsequencesCache` and applied only while `IsDepleted` is true. |
+| `activationWorker`     | element | `null`  | Optional `RechargeableActivationWorker` instance. The implant is always active when this field is omitted. |
+| `depletedConsequences` | element | `null`  | Optional `ChargeConsequenceProperties` block. Effects apply while both `IsChargeActive` and `IsDepleted` are true. |
 
-**Example with all fields:**
+**Example with depleted effects**
 
 ```xml
 <li Class="Chargeable_Hediffs_Framework.HediffCompProperties_Rechargeable">
@@ -183,6 +184,21 @@ Put this on a nonstacking apparel `ThingDef`. No `verbs` entry is needed. The fr
     </depletedConsequences>
 </li>
 ```
+
+#### Conditional charging
+
+Set `activationWorker` to a public concrete subclass of `Chargeable_Hediffs_Framework.RechargeableActivationWorker`.
+
+```xml
+<li Class="Chargeable_Hediffs_Framework.HediffCompProperties_Rechargeable">
+    <maxCharge>100</maxCharge>
+    <activationWorker Class="ExampleMod.MyActivationWorker" />
+</li>
+```
+
+Implement `public override bool IsActiveFor(Pawn pawn)` as a read-only query of current pawn state. RimWorld shares the worker across implants using that comp definition. The Framework may query it repeatedly during gameplay and stat evaluation, so keep it inexpensive and avoid stat or capacity queries that depend on charge effects. The result can change during play.
+
+An inactive implant stays installed. Its charge, charge UI, and depleted effects stay dormant until the worker returns `true`. The charge query helpers in `HediffChargeUtility` count active comps. Direct comp reads of `CurrentCharge`, `MaxCharge`, `ChargePercent`, and `IsDepleted` report stored values even while inactive. The existing starting-charge rules still apply and the stored charge is preserved across saves.
 
 ### HediffCompProperties_ChargeBattery fields
 
@@ -881,9 +897,10 @@ HediffComp_Rechargeable comp = myHediff.TryGetComp<HediffComp_Rechargeable>();
 | `MaxCharge`     | `float`                             | The configured `maxCharge` value.                                                                         |
 | `CurrentCharge` | `float`                             | Charge currently stored.                                                                                  |
 | `ChargePercent` | `float`                             | `CurrentCharge / MaxCharge`, clamped 0–1.                                                                 |
-| `IsDepleted`    | `bool`                              | `true` when `CurrentCharge <= 0`. Depleted consequences are active when this is `true`.                   |
-| `NeedsCharge`   | `bool`                              | `true` when `CurrentCharge < MaxCharge`.                                                                  |
-| `CanDecayNow`   | `bool`                              | `true` when the pawn is alive and either spawned on a map or in a caravan. Decay is suppressed otherwise. |
+| `IsDepleted`    | `bool`                              | `true` when stored charge reaches zero. |
+| `IsChargeActive` | `bool`                              | The worker's current result. Defaults to `true` for comps without a worker. |
+| `NeedsCharge`   | `bool`                              | `true` when the comp is active and `CurrentCharge < MaxCharge`. |
+| `CanDecayNow`   | `bool`                              | `true` when the comp is active and the pawn is alive and on a map or in a caravan. |
 
 **Methods**
 
@@ -893,6 +910,8 @@ HediffComp_Rechargeable comp = myHediff.TryGetComp<HediffComp_Rechargeable>();
 | `DrainCharge(float amount)` | Removes charge, clamped to `[0, MaxCharge]`. Notifies the pawn's health system if depletion state changes.                                          |
 | `SetCharge(float amount)`   | Sets charge to an absolute value, clamped to `[0, MaxCharge]`. Notifies on state change.                                                            |
 | `GetChargeInspectString()`  | Returns a formatted multi-line string with current/max charge, decay rate, depletion status, and active consequences. Used by `CompTipStringExtra`. |
+
+The charge mutation methods leave stored charge frozen while the comp is inactive. `GetChargeInspectString()` returns `null` while inactive.
 
 **Displayed strings (Health tab)**
 
@@ -968,7 +987,7 @@ A static utility with no shared state that mutates between calls. Safe to call f
 | `IsChargeStation(Thing thing)`                                  | Returns `true` when the thing has a `ChargeStationExtension`. Does not check power state.                                           |
 | `IsStationPowered(Thing thing)`                                 | Returns `true` when the thing's `CompPowerTrader` reports power is on.                                                              |
 | `IsValidStation(Thing station)`                                 | Returns `true` when the station is both a registered charge station and currently powered.                                          |
-| `CanStationCharge(Thing station, HediffComp_Rechargeable comp)` | Returns `true` when the station's whitelist (if any) includes the comp's `HediffDef`. Does not check power.                         |
+| `CanStationCharge(Thing station, HediffComp_Rechargeable comp)` | Returns `true` when the comp is active and the station supports its `HediffDef`. Does not check power.                         |
 | `GetChargeRatePerTick(Thing station)`                           | Returns the station's effective charge rate per tick (explicit `chargeRate` or `PowerConsumption / 60000`).                         |
 
 #### Pawn query helpers
@@ -1107,18 +1126,16 @@ The `ChargeStationExtension` can be added to **any** `ThingDef` that has a `Comp
 
 ### Harmony patch scope
 
-The framework applies two narrow Harmony postfix patches:
+The Framework patches four vanilla methods.
 
-| Patch target                                  | Purpose                                                                                                                     |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `PawnCapacityUtility.CalculatePartEfficiency` | Reads the pawn's `CompChargeConsequencesCache` for a cached part efficiency offset and adds it when the hediff is depleted. |
-| `Pawn.GetGizmos`                              | Dev-mode only: appends `Pawn_HealthTracker.GetGizmos()` (every `HediffComp`'s gizmos, including this framework's debug charge tools) for colony animals and player-owned ghouls. Vanilla only calls it for `IsColonistPlayerControlled`, `IsColonyMech`, or `IsPrisonerOfColony` pawns, so without this patch a rechargeable hediff's debug gizmos are unreachable on an animal or ghoul even with dev mode on. |
+| Patch target | Purpose |
+| ------------ | ------- |
+| `PawnCapacityUtility.CalculatePartEfficiency` | An infix applies the active depleted part-efficiency offset and adds the source hediff to the capacity explanation. |
+| `PawnCapacitiesHandler.GetLevel` | A prefix refreshes conditional depleted effects before vanilla reads a cached capacity. |
+| `StatWorker.GetValue(Thing, bool, int)` | A prefix refreshes relevant conditional depleted effects before vanilla reads a cached pawn stat. |
+| `Pawn.GetGizmos` | A postfix exposes health gizmos for colony animals and player-owned ghouls in Dev Mode. |
 
-Stat offsets and stat factors are applied through vanilla `ThingComp.GetStatOffset` and `ThingComp.GetStatFactor`, which `StatWorker.GetValueUnfinalized` already calls on every pawn comp - no Harmony patch is needed for stats.
-
-The `CalculatePartEfficiency` patch is **read-only** (modifies the return value only) and does a single dictionary lookup per queried body part with no allocations. The `Pawn.GetGizmos` patch only does any work when `DebugSettings.ShowDevGizmos` is true, and only for colony animals and player-owned ghouls - it is a no-op in normal play for every other pawn type.
-
-No other vanilla methods are patched.
+Vanilla reads the Framework's stat offsets and factors through `ThingComp.GetStatOffset` and `ThingComp.GetStatFactor`.
 
 ### Race def injection
 
@@ -1126,7 +1143,7 @@ Every pawn race `ThingDef` automatically receives a `CompChargeConsequencesCache
 
 ### Zero stat factors
 
-`depletedConsequences.statFactors` values must **not** be `0`. The cache stores a running product per stat and divides the factor back out on unregister; a zero factor cannot be divided out. Use a very small nonzero value (e.g. `0.001`) if you intend a near-total penalty. A config error is logged at startup if a zero factor is detected.
+`depletedConsequences.statFactors` values must **not** be `0`. Use a very small nonzero value (e.g. `0.001`) if you intend a near-total penalty. A config error is logged at startup if a zero factor is detected.
 
 ### Battery-to-battery transfer
 
@@ -1140,7 +1157,7 @@ The current version supports **electricity only**. There is no multi-resource or
 
 Decay runs while `CanDecayNow` is true:
 
-- Pawn is **alive** AND
-- Pawn is **spawned on a map** OR **in a caravan** (`pawn.GetCaravan() != null`).
+- The implant is active.
+- The pawn is alive and is **spawned on a map** or **in a caravan** (`pawn.GetCaravan() != null`).
 
 Decay is **suspended** when the pawn is dead, is in a cryptosleep casket (no caravan), or is otherwise off-map in a context that is not a caravan. Transport pods, orbital trade ships, and generated-world contexts do not count as caravans.

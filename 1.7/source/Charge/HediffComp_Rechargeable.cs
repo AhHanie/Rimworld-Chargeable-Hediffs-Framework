@@ -21,13 +21,14 @@ namespace Chargeable_Hediffs_Framework
 
         public bool IsDepleted => currentCharge <= 0f;
 
-        public bool NeedsCharge => currentCharge < Props.maxCharge;
+        public bool IsChargeActive => Props.activationWorker?.IsActiveFor(Pawn) ?? true;
+        public bool NeedsCharge => currentCharge < Props.maxCharge && IsChargeActive;
 
         // Decay only while alive and on a map or in a caravan.
-        public bool CanDecayNow => !Pawn.Dead && (Pawn.Spawned || Pawn.GetCaravan() != null);
+        public bool CanDecayNow => !Pawn.Dead && IsChargeActive && (Pawn.Spawned || Pawn.GetCaravan() != null);
 
         // Shows "74%" in the Health tab label: "Bionic Arm (74%)".
-        public override string CompLabelInBracketsExtra => ChargePercent.ToStringPercent();
+        public override string CompLabelInBracketsExtra => IsChargeActive ? ChargePercent.ToStringPercent() : null;
 
         // Shown in the hediff tooltip.
         public override string CompTipStringExtra => GetChargeInspectString();
@@ -59,14 +60,25 @@ namespace Chargeable_Hediffs_Framework
             HediffChargeUtility.GetChargeCache(Pawn)?.Unregister(this);
         }
 
+        public override void Notify_PawnDied(DamageInfo? dinfo, Hediff culprit = null)
+        {
+            HediffChargeUtility.GetChargeCache(Pawn)?.ClearOnDeath();
+        }
+
         public override void CompPostTickInterval(ref float severityAdjustment, int delta)
         {
-            if (CanDecayNow && Props.chargeDecayPerTick > 0f)
+            if (Props.activationWorker != null && Props.depletedConsequences != null && IsDepleted)
+                HediffChargeUtility.GetChargeCache(Pawn)?.CheckActivationOnTick(this);
+
+            if (Props.chargeDecayPerTick > 0f && !IsDepleted && CanDecayNow)
                 DrainCharge(Props.chargeDecayPerTick * delta);
         }
 
         public void AddCharge(float amount)
         {
+            if (!IsChargeActive)
+                return;
+
             bool wasDepleted = IsDepleted;
             currentCharge = Mathf.Clamp(currentCharge + amount, 0f, Props.maxCharge);
             if (wasDepleted && !IsDepleted)
@@ -75,6 +87,9 @@ namespace Chargeable_Hediffs_Framework
 
         public void DrainCharge(float amount)
         {
+            if (!IsChargeActive)
+                return;
+
             bool wasDepleted = IsDepleted;
             currentCharge = Mathf.Clamp(currentCharge - amount, 0f, Props.maxCharge);
             if (!wasDepleted && IsDepleted)
@@ -83,6 +98,9 @@ namespace Chargeable_Hediffs_Framework
 
         public void SetCharge(float amount)
         {
+            if (!IsChargeActive)
+                return;
+
             bool wasDepleted = IsDepleted;
             currentCharge = Mathf.Clamp(amount, 0f, Props.maxCharge);
             if (wasDepleted != IsDepleted)
@@ -111,6 +129,9 @@ namespace Chargeable_Hediffs_Framework
         // Reusable inspect text for callers that need charge info in inspect strings.
         public string GetChargeInspectString()
         {
+            if (!IsChargeActive)
+                return null;
+
             var sb = new StringBuilder();
             sb.Append("CHF_Charge".Translate());
             sb.Append(": ");
@@ -175,7 +196,7 @@ namespace Chargeable_Hediffs_Framework
 
         public override IEnumerable<Gizmo> CompGetGizmos()
         {
-            if (!DebugSettings.ShowDevGizmos)
+            if (!DebugSettings.ShowDevGizmos || !IsChargeActive)
                 yield break;
 
             yield return new Command_Action
@@ -211,6 +232,9 @@ namespace Chargeable_Hediffs_Framework
 
         public override string CompDebugString()
         {
+            if (!IsChargeActive)
+                return null;
+
             return $"charge: {currentCharge:F3} / {Props.maxCharge:F3}  ({ChargePercent:P0})  depleted={IsDepleted}";
         }
     }
